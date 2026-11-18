@@ -1,0 +1,2201 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 全天星空天球模擬器．中國星官版</title>
+    <meta name="description" content="以中國傳統星官命名的全天星空模擬器，含天球經緯線與寫實星體特效（88 星座資料庫）">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Noto+Sans+TC:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-glow: rgba(100, 180, 255, 0.6);
+            --bg-dark: #02040a;
+            --panel-bg: rgba(10, 15, 30, 0.85);
+            --accent: #7aa2f7;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            overflow: hidden; 
+            background: var(--bg-dark); 
+            font-family: 'Outfit', 'Noto Sans TC', sans-serif; 
+            color: #e0e8ff; 
+            user-select: none;
+        }
+
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+        #ui-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 24px;
+        }
+
+        header { text-align: center; }
+        header h1 { 
+            font-size: 1.4rem; 
+            font-weight: 700; 
+            letter-spacing: 3px;
+            background: linear-gradient(to right, #89ddff, #c0caf5, #bb9af7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 4px;
+        }
+        header p { font-size: 0.9rem; color: #565f89; letter-spacing: 3px; }
+
+        #star-label {
+            position: fixed;
+            pointer-events: none;
+            display: none;
+            transform: translate(-50%, -150%);
+            transition: opacity 0.2s;
+        }
+        .label-content {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(122, 162, 247, 0.4);
+            border-radius: 12px;
+            padding: 8px 20px;
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.5), 0 0 15px var(--primary-glow);
+        }
+        .label-name { font-size: 1rem; font-weight: 600; color: #fff; text-shadow: 0 0 8px var(--primary-glow); }
+        .label-coords { font-size: 0.7rem; color: #7aa2f7; margin-top: 2px; }
+
+        #bottom-controls {
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            width: 100%;
+        }
+
+        #sub-menu, #const-submenu {
+            display: none;
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 12px;
+            max-width: 90vw;
+            overflow-x: auto;
+            white-space: nowrap;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+        }
+        .star-grid { display: flex; gap: 8px; }
+        .star-item, .const-item {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 0.85rem;
+            color: #a9b1d6;
+        }
+        .star-item:hover, .const-item:hover { 
+            background: rgba(122, 162, 247, 0.2); 
+            border-color: #7aa2f7; 
+            color: #fff;
+            transform: translateY(-4px);
+        }
+        .star-item.active, .const-item.active { background: #7aa2f7; color: #1a1b26; border-color: #fff; font-weight: 600; }
+        /* 星座子選單項目用不同色系區分（琥珀色系）*/
+        .const-item { border-color: rgba(224, 175, 104, 0.25); }
+        .const-item:hover { background: rgba(224, 175, 104, 0.2); border-color: #e0af68; }
+        .const-item.active { background: #e0af68; color: #1a1b26; border-color: #fff; }
+
+        #const-menu {
+            display: flex;
+            gap: 8px;
+            padding: 6px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            max-width: 95vw;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        #const-menu::-webkit-scrollbar { display: none; }
+        .const-btn {
+            background: transparent;
+            border: none;
+            color: #787c99;
+            padding: 8px 16px; white-space: nowrap; font-size: 0.9rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: all 0.4s;
+            letter-spacing: 1px;
+        }
+        .const-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
+        .const-btn.active { 
+            background: linear-gradient(135deg, #7aa2f7, #bb9af7);
+            color: #fff;
+            box-shadow: 0 0 20px rgba(122, 162, 247, 0.4);
+        }
+
+        #info-panel { display: none; }
+
+        /* 星體詳細資料面板 - 手機版 Bottom Sheet */
+        #detail-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(8, 12, 28, 0.95);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(122, 162, 247, 0.3);
+            border-radius: 24px 24px 0 0;
+            padding: 24px 24px 40px;
+            pointer-events: auto;
+            transform: translateY(100%);
+            transition: transform 0.4s cubic-bezier(0.1, 0.9, 0.2, 1);
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.6);
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+        }
+        #detail-panel.visible { transform: translateY(0); }
+        .dp-drag-handle {
+            width: 40px;
+            height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+            margin: -10px auto 16px;
+        }
+        .dp-close {
+            position: absolute;
+            top: 16px;
+            right: 24px;
+            font-size: 24px;
+            color: rgba(255,255,255,0.5);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+        }
+        .dp-close:hover { color: white; }
+        .dp-type {
+            font-size: 0.65rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .dp-name {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+            line-height: 1.3;
+        }
+        .dp-divider {
+            height: 1px;
+            background: linear-gradient(to right, rgba(122,162,247,0.5), transparent);
+            margin: 12px 0;
+        }
+        .dp-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+            font-size: 0.78rem;
+        }
+        .dp-label { color: #565f89; }
+        .dp-value { color: #c0caf5; font-weight: 600; }
+        #dp-west { font-size: 0.72rem; text-align: right; max-width: 65%; }
+        .dp-desc {
+            margin-top: 14px;
+            font-size: 0.75rem;
+            color: #787c99;
+            line-height: 1.6;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            padding-top: 12px;
+        }
+
+        /* 夏季大三角 badge */
+        .summer-triangle-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, rgba(255,200,60,0.2), rgba(255,160,30,0.15));
+            border: 1px solid rgba(255,200,60,0.4);
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 0.65rem;
+            color: #ffc83c;
+            margin-top: 6px;
+            letter-spacing: 1px;
+        }
+
+        /* Scrollbar styling */
+        #sub-menu::-webkit-scrollbar, #const-submenu::-webkit-scrollbar { height: 4px; }
+        #sub-menu::-webkit-scrollbar-track, #const-submenu::-webkit-scrollbar-track { background: transparent; }
+        #sub-menu::-webkit-scrollbar-thumb, #const-submenu::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 10px; }
+
+        /* 分類大標題按鈕（最底層）與星座小標題有所區隔 */
+        .category-btn { position: relative; }
+        .category-btn::after {
+            content: '›';
+            margin-left: 4px;
+            opacity: 0.6;
+            font-weight: 400;
+        }
+        .category-btn.active::after { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <div id="star-label">
+        <div class="label-content">
+            <div class="label-name" id="l-name">織女星</div>
+            <div class="label-coords" id="l-coords">RA: 279° | Dec: 39°</div>
+        </div>
+    </div>
+
+    <!-- 右側詳細資料面板 -->
+    <div id="detail-panel">
+        <div class="dp-drag-handle" id="dp-handle"></div>
+        <button class="dp-close" id="dp-close">&times;</button>
+        <div class="dp-type" id="dp-type"></div>
+        <div class="dp-name" id="dp-name"></div>
+        <div id="dp-badge"></div>
+        <div class="dp-divider"></div>
+        <div class="dp-row" id="dp-west-row"><span class="dp-label">西方星名</span><span class="dp-value" id="dp-west"></span></div>
+        <div class="dp-row" id="dp-hip-row"><span class="dp-label">星表編號</span><span class="dp-value" id="dp-hip"></span></div>
+        <div class="dp-row"><span class="dp-label">赤經 RA</span><span class="dp-value" id="dp-ra"></span></div>
+        <div class="dp-row"><span class="dp-label">赤緯 Dec</span><span class="dp-value" id="dp-dec"></span></div>
+        <div class="dp-row" id="dp-mag-row"><span class="dp-label">視星等</span><span class="dp-value" id="dp-mag"></span></div>
+        <div class="dp-row" id="dp-dist-row"><span class="dp-label">距離</span><span class="dp-value" id="dp-dist"></span></div>
+        <div class="dp-desc" id="dp-desc"></div>
+    </div>
+
+    <div id="ui-overlay">
+        <header>
+            <h1>ALL-SKY CELESTIAL</h1>
+            <p>全天球．中國星官版</p>
+        </header>
+
+        <div id="bottom-controls">
+            <div id="sub-menu">
+                <div class="star-grid" id="star-btns"></div>
+            </div>
+            <div id="const-submenu">
+                <div class="star-grid" id="const-btns"></div>
+            </div>
+            <div id="const-menu"></div>
+        </div>
+    </div>
+
+    <div id="info-panel">
+        中心：觀測者 (Observer)<br>
+        半徑：100 (Celestial Sphere)<br>
+        經緯：RA 赤經 / Dec 赤緯
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+        import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+        import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+
+        // --- 核心資料 ---
+        const SUMMER_TRIANGLE = ['織女一','天津四','河鼓二']; // 中國星官名：織女一＝Vega、天津四＝Deneb、河鼓二＝Altair
+
+const CONSTELLATIONS = [
+            { id:"ursa_minor", name:"小熊座", nameEn:"Ursa Minor",
+              stars:[
+                {name:"勾陳四", ra:236.0147, dec:77.7945, type:"star", mag:4.29, color:0xd9e4ff, west:"Akfa Farkadain · 小熊座 ζ", hip:77055, desc:"中國星官「勾陳」的成員星，同時也是小熊座連線圖形上的一顆星。"},
+                {name:"勾陳增九", ra:244.3762, dec:75.7553, type:"star", mag:4.95, color:0xf8f7ff, west:"Anwa Farkadain · 小熊座 η", hip:79822, desc:"中國星官「勾陳」的成員星，同時也是小熊座連線圖形上的一顆星。"},
+                {name:"北極一", ra:230.1821, dec:71.834, type:"star", mag:3.0, color:0xd0e0ff, west:"Pherkad · 小熊座 γ", hip:75097, desc:"中國星官「北極」的成員星，小熊座的主要亮星之一。"},
+                {name:"北極二", ra:222.6764, dec:74.1555, type:"star", mag:2.07, color:0xffcc88, west:"Kochab · 小熊座 β", hip:72607, desc:"橘色巨星，古代的北極星之一。"},
+                {name:"勾陳三", ra:251.4927, dec:82.0373, type:"star", mag:4.21, color:0xffebda, west:"Circitores · 小熊座 ε", hip:82080, desc:"中國星官「勾陳」的成員星，同時也是小熊座連線圖形上的一顆星。"},
+                {name:"勾陳二", ra:263.0542, dec:86.5865, type:"star", mag:4.35, color:0xd8e4ff, west:"Yildun · 小熊座 δ", hip:85822, desc:"中國星官「勾陳」的成員星，同時也是小熊座連線圖形上的一顆星。"},
+                {name:"勾陳一", ra:37.9545, dec:89.2641, type:"star", mag:1.97, color:0xfff4ea, west:"Polaris · 小熊座 α", hip:11767, desc:"星官「勾陳」。當前的北極星，幾乎正對著地球的地軸北極。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 0], [0, 4], [4, 5], [5, 6]]
+            },
+            { id:"ursa_major", name:"大熊座", nameEn:"Ursa Major",
+              stars:[
+                {name:"北斗四", ra:183.8565, dec:57.0326, type:"star", mag:3.32, color:0xd0e0ff, west:"Megrez · 大熊座 δ", hip:59774, desc:"天權。北斗四，七星中最暗的一顆。"},
+                {name:"北斗一", ra:165.932, dec:61.751, type:"star", mag:1.79, color:0xffcc88, west:"Dubhe · 大熊座 α", hip:54061, desc:"天樞。北斗七星勺口第一星，與天璇連線延長五倍可找北極星。"},
+                {name:"北斗二", ra:165.4603, dec:56.3824, type:"star", mag:2.34, color:0xd0e0ff, west:"Merak · 大熊座 β", hip:53910, desc:"天璇。北斗二。"},
+                {name:"北斗三", ra:178.4577, dec:53.6948, type:"star", mag:2.41, color:0xd0e0ff, west:"Phecda · 大熊座 γ", hip:58001, desc:"天機。北斗三。"},
+                {name:"北斗五", ra:193.5073, dec:55.9598, type:"star", mag:1.76, color:0xd0e0ff, west:"Alioth · 大熊座 ε", hip:62956, desc:"玉衡。北斗五，大熊座最亮的恆星。"},
+                {name:"北斗六", ra:200.9814, dec:54.9254, type:"star", mag:2.23, color:0xd0e0ff, west:"Mizar · 大熊座 ζ", hip:65378, desc:"開陽。北斗六，肉眼可辨的著名雙星（伴星為輔）。"},
+                {name:"北斗七", ra:206.8852, dec:49.3133, type:"star", mag:1.85, color:0xd0e0ff, west:"Alkaid · 大熊座 η", hip:67301, desc:"搖光。北斗七，位於勺柄末端。"},
+                {name:"太陽守", ra:176.5126, dec:47.7794, type:"star", mag:3.69, color:0xffe0c8, west:"Taiyangshou · 大熊座 χ", hip:57399, desc:"中國星官「太陽守」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"三臺五", ra:169.6197, dec:33.0943, type:"star", mag:3.49, color:0xffd9bb, west:"Alula Borealis · 大熊座 ν", hip:55219, desc:"中國星官「三臺」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"三臺六", ra:169.5468, dec:31.5308, type:"star", mag:3.79, color:0xfff8f0, west:"Alula Australis · 大熊座 ξ", hip:55203, desc:"中國星官「三臺」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"太尊", ra:167.4159, dec:44.4985, type:"star", mag:3, color:0xffe2ca, west:"大熊座 ψ", hip:54539, desc:"中國星官「太尊」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"三臺四", ra:155.5823, dec:41.4995, type:"star", mag:3.06, color:0xffd3af, west:"Tania Australis · 大熊座 μ", hip:50801, desc:"中國星官「三臺」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"三臺三", ra:154.2741, dec:42.9144, type:"star", mag:3.45, color:0xd8e4ff, west:"Tania Borealis · 大熊座 λ", hip:50372, desc:"中國星官「三臺」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"內階四", ra:142.8821, dec:63.0619, type:"star", mag:3.65, color:0xf3f4ff, west:"大熊座 h", hip:46733, desc:"中國星官「內階」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"內階一", ra:127.5661, dec:60.7182, type:"star", mag:3.35, color:0xffecdd, west:"Muscida · 大熊座 ο", hip:41704, desc:"中國星官「內階」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"文昌二", ra:147.7473, dec:59.0387, type:"star", mag:3.78, color:0xecf0ff, west:"大熊座 υ", hip:48319, desc:"中國星官「文昌」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"文昌三", ra:148.0265, dec:54.0643, type:"star", mag:4.55, color:0xd9e4ff, west:"大熊座 φ", hip:48402, desc:"中國星官「文昌」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"文昌四", ra:143.2143, dec:51.6773, type:"star", mag:3.17, color:0xfffefb, west:"大熊座 θ", hip:46853, desc:"中國星官「文昌」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"三臺一", ra:134.8019, dec:48.0418, type:"star", mag:3.12, color:0xe6ecff, west:"Talitha · 大熊座 ι", hip:44127, desc:"中國星官「三臺」的成員星，同時也是大熊座連線圖形上的一顆星。"},
+                {name:"三臺二", ra:135.9064, dec:47.1565, type:"star", mag:3.57, color:0xd7e3ff, west:"Alkaphrah · 大熊座 κ", hip:44471, desc:"中國星官「三臺」的成員星，同時也是大熊座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 0], [0, 4], [4, 5], [5, 6], [3, 7], [7, 8], [8, 9], [7, 10], [10, 11], [10, 12], [1, 13], [13, 14], [14, 15], [15, 2], [2, 16], [16, 17], [17, 18], [19, 17]]
+            },
+            { id:"cassiopeia", name:"仙后座", nameEn:"Cassiopeia",
+              stars:[
+                {name:"閣道二", ra:28.5989, dec:63.6701, type:"star", mag:3.35, color:0xd0e0ff, west:"Segin · 仙后座 ε", hip:8886, desc:"星官「閣道」。仙后座ε，W 字型左端星。"},
+                {name:"閣道三", ra:21.454, dec:60.2353, type:"star", mag:2.66, color:0xd0e0ff, west:"Ruchbah · 仙后座 δ", hip:6686, desc:"星官「閣道」。仙后座δ。"},
+                {name:"策", ra:14.1772, dec:60.7167, type:"star", mag:2.15, color:0xd0e0ff, west:"Tsih · 仙后座 γ", hip:4427, desc:"星官「策」。仙后座γ，W 字型中心點，不穩定的爆發型變星。"},
+                {name:"王良四", ra:10.1268, dec:56.5373, type:"star", mag:2.24, color:0xffcc88, west:"Schedar · 仙后座 α", hip:3179, desc:"星官「王良」。仙后座α，是一顆橙色巨星。"},
+                {name:"王良一", ra:2.2945, dec:59.1498, type:"star", mag:2.28, color:0xfff4ea, west:"Caph · 仙后座 β", hip:746, desc:"星官「王良」。仙后座β，秋季星空代表性的 W 字型右端星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4]]
+            },
+            { id:"cepheus", name:"仙王座", nameEn:"Cepheus",
+              stars:[
+                {name:"天鉤三", ra:307.3954, dec:62.9941, type:"star", mag:4.21, color:0xe4ebff, west:"Al Kidr · 仙王座 θ", hip:101093, desc:"中國星官「天鉤」的成員星，同時也是仙王座連線圖形上的一顆星。"},
+                {name:"天鉤四", ra:311.3224, dec:61.8388, type:"star", mag:3.41, color:0xffead9, west:"Kabalfird · 仙王座 η", hip:102422, desc:"中國星官「天鉤」的成員星，同時也是仙王座連線圖形上的一顆星。"},
+                {name:"天鉤五", ra:319.6449, dec:62.5856, type:"star", mag:2.45, color:0xffffff, west:"Alderamin · 仙王座 α", hip:105199, desc:"星官「天鉤」。仙王座最亮星，自轉極快。"},
+                {name:"造父四", ra:325.8769, dec:58.78, type:"star", mag:4.08, color:0xff2211, west:"Garnet Star · 仙王座 μ", hip:107259, desc:"星官「造父」。石榴星。極度巨大的紅色超巨星，赫歇爾曾讚嘆其美麗色澤。"},
+                {name:"螣蛇九", ra:333.7591, dec:57.0436, type:"star", mag:4.18, color:0xebefff, west:"仙王座 ε", hip:109857, desc:"中國星官「螣蛇」的成員星，同時也是仙王座連線圖形上的一顆星。"},
+                {name:"造父二", ra:332.7137, dec:58.2013, type:"star", mag:3.39, color:0xffd4b2, west:"仙王座 ζ", hip:109492, desc:"中國星官「造父」的成員星，同時也是仙王座連線圖形上的一顆星。"},
+                {name:"造父一", ra:337.2928, dec:58.4152, type:"star", mag:4.07, color:0xfff4ea, west:"δ Cephei · 仙王座 δ", hip:110991, desc:"造父變星的原型。這類恆星的亮度脈動周期與絕對星等有直接關係，是天文學測量星系距離的重要「標準燭光」。"},
+                {name:"天鉤八", ra:342.4201, dec:66.2004, type:"star", mag:3.5, color:0xffe5d0, west:"仙王座 ι", hip:112724, desc:"中國星官「天鉤」的成員星，同時也是仙王座連線圖形上的一顆星。"},
+                {name:"少衛增八", ra:354.8369, dec:77.6323, type:"star", mag:3.21, color:0xffe6d1, west:"Errai · 仙王座 γ", hip:116727, desc:"中國星官「少衛」的成員星，同時也是仙王座連線圖形上的一顆星。"},
+                {name:"上衛增一", ra:322.165, dec:70.5607, type:"star", mag:3.23, color:0xcbdcff, west:"Alfirk · 仙王座 β", hip:106032, desc:"中國星官「上衛」的成員星，同時也是仙王座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 2], [9, 7]]
+            },
+            { id:"andromeda", name:"仙女座", nameEn:"Andromeda",
+              stars:[
+                {name:"天大將軍一", ra:30.9748, dec:42.3297, type:"star", mag:2.1, color:0xffcc44, west:"Almach · 仙女座 γ1", hip:9640, desc:"星官「天大將軍」。美麗的小型雙星系統，望遠鏡下呈現鮮明的橙藍對比。"},
+                {name:"奎宿九", ra:17.433, dec:35.6206, type:"star", mag:2.07, color:0xffcc88, west:"Mirach · 仙女座 β", hip:5447, desc:"星官「奎宿」。紅巨星，常用作尋找仙女座大星系的起點。"},
+                {name:"奎宿五", ra:9.832, dec:30.861, type:"star", mag:3.27, color:0xffddc2, west:"仙女座 δ", hip:3092, desc:"中國星官「奎宿」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"壁宿二", ra:2.0969, dec:29.0904, type:"star", mag:2.06, color:0xd0e0ff, west:"Alpheratz · 仙女座 α", hip:677, desc:"星官「壁宿」。仙女座最亮星，同時也是「飛馬座四邊形」的其中一個頂點。"},
+                {name:"奎宿一", ra:14.3017, dec:23.4176, type:"star", mag:4.4, color:0xffe9d7, west:"仙女座 η", hip:4463, desc:"中國星官「奎宿」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"奎宿二", ra:11.8347, dec:24.2672, type:"star", mag:4.08, color:0xffe3cd, west:"仙女座 ζ", hip:3693, desc:"中國星官「奎宿」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"奎宿四", ra:9.6389, dec:29.3118, type:"star", mag:4.34, color:0xffecdc, west:"仙女座 ε", hip:3031, desc:"中國星官「奎宿」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"奎宿六", ra:9.2202, dec:33.7193, type:"star", mag:4.34, color:0xcfdeff, west:"仙女座 π", hip:2912, desc:"中國星官「奎宿」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"螣蛇廿二", ra:354.5342, dec:43.2681, type:"star", mag:4.29, color:0xd1e0ff, west:"仙女座 ι", hip:116631, desc:"中國星官「螣蛇廿」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"車府增十六", ra:345.4803, dec:42.326, type:"star", mag:3.62, color:0xd1dfff, west:"仙女座 ο", hip:113726, desc:"中國星官「車府」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"螣蛇廿一", ra:355.1021, dec:44.3339, type:"star", mag:4.15, color:0xd2e0ff, west:"仙女座 κ", hip:116805, desc:"中國星官「螣蛇廿」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"螣蛇十九", ra:354.391, dec:46.4582, type:"star", mag:3.81, color:0xffe7d4, west:"仙女座 λ", hip:116584, desc:"中國星官「螣蛇」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"奎宿八", ra:14.1884, dec:38.4993, type:"star", mag:3.86, color:0xdfe8ff, west:"仙女座 μ", hip:4436, desc:"中國星官「奎宿」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"奎宿七", ra:12.4535, dec:41.0789, type:"star", mag:4.53, color:0xcedeff, west:"仙女座 ν", hip:3881, desc:"中國星官「奎宿」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"軍南門", ra:17.3755, dec:47.2418, type:"star", mag:4.26, color:0xd7e3ff, west:"仙女座 φ", hip:5434, desc:"中國星官「軍南門」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"天大將軍三", ra:24.4982, dec:48.6282, type:"star", mag:3.59, color:0xffddc2, west:"Nembus · 仙女座 51", hip:7607, desc:"中國星官「天大將軍」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"螣蛇廿", ra:356.5085, dec:46.4203, type:"star", mag:4.97, color:0xffe4ce, west:"仙女座 ψ", hip:117221, desc:"中國星官「螣蛇廿」的成員星，同時也是仙女座連線圖形上的一顆星。"},
+                {name:"M31 仙女座大星系", ra:10.7, dec:41.3, type:"nebula", color:0xccccff, desc:"本星系群中最大的星系，距地球約 250 萬光年，肉眼隱約可見。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [4, 5], [5, 6], [6, 2], [2, 7], [7, 8], [8, 9], [8, 10], [10, 11], [1, 12], [12, 13], [13, 14], [14, 15], [10, 16]]
+            },
+            { id:"perseus", name:"英仙座", nameEn:"Perseus",
+              stars:[
+                {name:"捲舌五", ra:56.0797, dec:32.2882, type:"star", mag:3.84, color:0xd8e4ff, west:"Atik · 英仙座 ο", hip:17448, desc:"中國星官「捲舌」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"捲舌四", ra:58.533, dec:31.8836, type:"star", mag:2.84, color:0xeaefff, west:"Atik · 英仙座 ζ", hip:18246, desc:"中國星官「捲舌」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"捲舌三", ra:59.7413, dec:35.791, type:"star", mag:3.98, color:0xd7e4ff, west:"Menkib · 英仙座 ξ", hip:18614, desc:"中國星官「捲舌」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"捲舌二", ra:59.4635, dec:40.0102, type:"star", mag:2.9, color:0xcbdcff, west:"英仙座 ε", hip:18532, desc:"中國星官「捲舌」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"捲舌一", ra:56.2985, dec:42.5785, type:"star", mag:3.77, color:0xfdf9ff, west:"英仙座 ν", hip:17529, desc:"中國星官「捲舌」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"天船五", ra:55.7313, dec:47.7876, type:"star", mag:3.01, color:0xcfdeff, west:"英仙座 δ", hip:17358, desc:"中國星官「天船」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"天船四", ra:54.1224, dec:48.1926, type:"star", mag:4.32, color:0xd3e1ff, west:"英仙座 ψ", hip:16826, desc:"中國星官「天船」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"天船三", ra:51.0807, dec:49.8612, type:"star", mag:1.79, color:0xfff4ea, west:"Mirfak · 英仙座 α", hip:15863, desc:"星官「天船」。英仙座最亮星，黃白色超巨星。"},
+                {name:"天船二", ra:46.1991, dec:53.5064, type:"star", mag:2.91, color:0xfff3e8, west:"英仙座 γ", hip:14328, desc:"中國星官「天船」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"天船一", ra:42.6742, dec:55.8955, type:"star", mag:3.77, color:0xffd1ab, west:"Miram · 英仙座 η", hip:13268, desc:"中國星官「天船」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"大陵二", ra:43.5644, dec:52.7625, type:"star", mag:3.93, color:0xfff1e4, west:"英仙座 τ", hip:13531, desc:"中國星官「大陵」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"大陵三", ra:47.2667, dec:49.6133, type:"star", mag:4.05, color:0xfff8f1, west:"英仙座 ι", hip:14632, desc:"中國星官「大陵」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"大陵四", ra:47.374, dec:44.8575, type:"star", mag:3.79, color:0xffe8d5, west:"Misam · 英仙座 κ", hip:14668, desc:"中國星官「大陵」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"大陵五", ra:47.0422, dec:40.9556, type:"star", mag:2.12, color:0xd0e0ff, west:"Algol · 英仙座 β", hip:14576, desc:"星官「大陵」。著名的食雙星，古人稱為「惡魔之星」，亮度每隔 2.87 天會規律變暗。"},
+                {name:"大陵增十八", ra:47.8224, dec:39.6116, type:"star", mag:4.61, color:0xffe3cc, west:"Gorgonea Quarta · 英仙座 ω", hip:14817, desc:"中國星官「大陵」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"大陵六", ra:46.2941, dec:38.8403, type:"star", mag:3.32, color:0xffd5b3, west:"Gorgonea Tertia · 英仙座 ρ", hip:14354, desc:"中國星官「大陵」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"積屍", ra:44.6903, dec:39.6627, type:"star", mag:4.68, color:0xdae5ff, west:"Gorgonea Secunda · 英仙座 π", hip:13879, desc:"中國星官「積屍（胃宿）」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"英仙座 π", ra:44.9162, dec:41.0329, type:"star", mag:5.89, color:0xffd8b8, west:"英仙座 π", hip:13949, desc:"近南極星區，中國古代星官未涵蓋此星；為英仙座連線圖形上的一顆星。"},
+                {name:"積水", ra:61.646, dec:50.3513, type:"star", mag:4.25, color:0xd6e3ff, west:"英仙座 λ", hip:19167, desc:"中國星官「積水（胃宿）」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"天船七", ra:63.7244, dec:48.4093, type:"star", mag:4.12, color:0xffe9d8, west:"英仙座 μ", hip:19812, desc:"中國星官「天船」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"天船六", ra:62.1654, dec:47.7125, type:"star", mag:3.96, color:0xd5e2ff, west:"Nembus · 英仙座 c", hip:19343, desc:"中國星官「天船」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"大陵增十三", ra:41.0499, dec:49.2284, type:"star", mag:4.1, color:0xfffcf8, west:"英仙座 θ", hip:12777, desc:"中國星官「大陵」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"天大將軍二", ra:25.9152, dec:50.6887, type:"star", mag:4.01, color:0xd1dfff, west:"英仙座 φ", hip:8068, desc:"中國星官「天大將軍」的成員星，同時也是英仙座連線圖形上的一顆星。"},
+                {name:"英仙座雙星團 (NGC 869/884)", ra:35.1, dec:57.1, type:"cluster", color:0xffffff, desc:"兩個相鄰極近的年輕疏散星團，望遠鏡下繁星密佈。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11], [11, 12], [12, 13], [13, 14], [14, 15], [15, 16], [16, 17], [17, 13], [18, 19], [19, 20], [20, 5], [11, 21], [21, 22]]
+            },
+            { id:"auriga", name:"御夫座", nameEn:"Auriga",
+              stars:[
+                {name:"五車三", ra:89.8822, dec:44.9474, type:"star", mag:1.9, color:0xd0e0ff, west:"Menkalinan · 御夫座 β", hip:28360, desc:"星官「五車」。次巨星。"},
+                {name:"五車二", ra:79.1723, dec:45.998, type:"star", mag:0.08, color:0xfff4ea, west:"Capella · 御夫座 α", hip:24608, desc:"星官「五車」。全天第六亮星，是一個由兩對雙星組成的四合星系統。"},
+                {name:"柱三", ra:76.6287, dec:41.2345, type:"star", mag:3.18, color:0xcedeff, west:"Haedus · 御夫座 η", hip:23767, desc:"中國星官「柱（畢宿）」的成員星，同時也是御夫座連線圖形上的一顆星。"},
+                {name:"五車一", ra:74.2484, dec:33.1661, type:"star", mag:2.69, color:0xffd6b5, west:"Hassaleh · 御夫座 ι", hip:23015, desc:"中國星官「五車」的成員星，同時也是御夫座連線圖形上的一顆星。"},
+                {name:"五車五", ra:81.573, dec:28.6075, type:"star", mag:1.65, color:0xcfdeff, west:"Elnath · 御夫座 β", hip:25428, desc:"中國星官「五車」的成員星，同時也是御夫座連線圖形上的一顆星。"},
+                {name:"五車四", ra:89.9303, dec:37.2126, type:"star", mag:2.65, color:0xd1e0ff, west:"Mahasim · 御夫座 θ", hip:28380, desc:"中國星官「五車」的成員星，同時也是御夫座連線圖形上的一顆星。"},
+                {name:"八谷一", ra:89.8818, dec:54.2847, type:"star", mag:3.72, color:0xffe6d3, west:"御夫座 δ", hip:28358, desc:"中國星官「八谷」的成員星，同時也是御夫座連線圖形上的一顆星。"},
+                {name:"柱一", ra:75.4922, dec:43.8233, type:"star", mag:3.03, color:0xfffbf6, west:"Almaaz · 御夫座 ε", hip:23416, desc:"中國星官「柱（畢宿）」的成員星，同時也是御夫座連線圖形上的一顆星。"},
+                {name:"柱二", ra:75.6195, dec:41.0758, type:"star", mag:3.69, color:0xffe1c9, west:"Saclateni · 御夫座 ζ", hip:23453, desc:"中國星官「柱（畢宿）」的成員星，同時也是御夫座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 1], [1, 7], [7, 8]]
+            },
+            { id:"bootes", name:"牧夫座", nameEn:"Bo\u00f6tes",
+              stars:[
+                {name:"右攝提二", ra:206.8156, dec:17.4569, type:"star", mag:4.5, color:0xfffdf8, west:"牧夫座 τ", hip:67275, desc:"中國星官「右攝提」的成員星，同時也是牧夫座連線圖形上的一顆星。"},
+                {name:"右攝提一", ra:208.6712, dec:18.3977, type:"star", mag:2.68, color:0xfff9f2, west:"Muphrid · 牧夫座 η", hip:67927, desc:"中國星官「右攝提」的成員星，同時也是牧夫座連線圖形上的一顆星。"},
+                {name:"大角", ra:213.9153, dec:19.1824, type:"star", mag:-0.05, color:0xffaa66, west:"Arcturus · 牧夫座 α", hip:69673, desc:"星官「大角」。北半球夜空最亮的恆星，橙色巨星，春季大曲線的終點。"},
+                {name:"梗河三", ra:217.9575, dec:30.3714, type:"star", mag:3.57, color:0xffdcc1, west:"牧夫座 ρ", hip:71053, desc:"中國星官「梗河」的成員星，同時也是牧夫座連線圖形上的一顆星。"},
+                {name:"招搖", ra:218.0195, dec:38.3083, type:"star", mag:3.04, color:0xe3ebff, west:"Seginus · 牧夫座 γ", hip:71075, desc:"中國星官「招搖」的成員星，同時也是牧夫座連線圖形上的一顆星。"},
+                {name:"七公增五", ra:225.4865, dec:40.3906, type:"star", mag:3.49, color:0xffe9d6, west:"Nekkar · 牧夫座 β", hip:73555, desc:"中國星官「七公」的成員星，同時也是牧夫座連線圖形上的一顆星。"},
+                {name:"七公七", ra:228.8757, dec:33.3148, type:"star", mag:3.46, color:0xffe8d6, west:"Thiba · 牧夫座 δ", hip:74666, desc:"中國星官「七公」的成員星，同時也是牧夫座連線圖形上的一顆星。"},
+                {name:"梗河一", ra:221.2467, dec:27.0742, type:"star", mag:2.35, color:0xffe8d6, west:"Izar · 牧夫座 ε", hip:72105, desc:"中國星官「梗河」的成員星，同時也是牧夫座連線圖形上的一顆星。"},
+                {name:"左攝提三", ra:220.2873, dec:13.7283, type:"star", mag:3.78, color:0xd9e5ff, west:"牧夫座 ζ", hip:71795, desc:"中國星官「左攝提」的成員星，同時也是牧夫座連線圖形上的一顆星。"},
+                {name:"玄戈", ra:214.0959, dec:46.0883, type:"star", mag:4.18, color:0xdce6ff, west:"Xuange · 牧夫座 λ", hip:69732, desc:"中國星官「玄戈」的成員星，同時也是牧夫座連線圖形上的一顆星。"},
+                {name:"天槍一", ra:213.3659, dec:51.7879, type:"star", mag:6.62, color:0xf8f7ff, west:"牧夫座 κ1", hip:69481, desc:"中國星官「天槍」的成員星，同時也是牧夫座連線圖形上的一顆星。"},
+                {name:"天槍三", ra:216.2992, dec:51.8507, type:"star", mag:4.04, color:0xfffdf9, west:"Asellus Primus · 牧夫座 θ", hip:70497, desc:"中國星官「天槍」的成員星，同時也是牧夫座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 2], [2, 8], [4, 9], [9, 10], [10, 11], [11, 9]]
+            },
+            { id:"lyra", name:"天琴座", nameEn:"Lyra",
+              stars:[
+                {name:"織女三", ra:281.1932, dec:37.6051, type:"star", mag:4.34, color:0xe3ebff, west:"Nasr Alwaki · 天琴座 ζ1", hip:91971, desc:"中國星官「織女」的成員星，同時也是天琴座連線圖形上的一顆星。"},
+                {name:"織女增二", ra:281.0949, dec:39.6127, type:"star", mag:4.59, color:0xe2eaff, west:"天琴座 ε2", hip:91926, desc:"中國星官「織女」的成員星，同時也是天琴座連線圖形上的一顆星。"},
+                {name:"織女一", ra:279.2347, dec:38.7837, type:"star", mag:0.03, color:0xd0e0ff, west:"Vega · 天琴座 α", hip:91262, desc:"星官「織女」。藍白色的夜空名星，夏季大三角的重要頂點。"},
+                {name:"漸臺一", ra:283.6262, dec:36.8986, type:"star", mag:4.22, color:0xffd4b1, west:"天琴座 δ2", hip:92791, desc:"中國星官「漸臺」的成員星，同時也是天琴座連線圖形上的一顆星。"},
+                {name:"漸臺三", ra:284.7359, dec:32.6896, type:"star", mag:3.25, color:0xffffff, west:"Sulafat · 天琴座 γ", hip:93194, desc:"星官「漸臺」。天琴座γ，B型巨星。"},
+                {name:"漸臺二", ra:282.52, dec:33.3627, type:"star", mag:3.45, color:0xfff4ea, west:"Sheliak · 天琴座 β", hip:92420, desc:"星官「漸臺」。天琴座β，變星。"},
+                {name:"M57 環狀星雲", ra:283.4, dec:33.0, type:"nebula", color:0xff55aa, desc:"經典的行星狀星雲，宛如宇宙中的一枚戒指。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 0], [0, 3], [3, 4], [4, 5], [5, 0]]
+            },
+            { id:"cygnus", name:"天鵝座", nameEn:"Cygnus",
+              stars:[
+                {name:"天津八", ra:318.2341, dec:30.2269, type:"star", mag:3.21, color:0xffe7d4, west:"天鵝座 ζ", hip:104732, desc:"中國星官「天津」的成員星，同時也是天鵝座連線圖形上的一顆星。"},
+                {name:"天津九", ra:311.5528, dec:33.9703, type:"star", mag:2.48, color:0xffe6d2, west:"Aljanah · 天鵝座 ε", hip:102488, desc:"中國星官「天津」的成員星，同時也是天鵝座連線圖形上的一顆星。"},
+                {name:"天津一", ra:305.5571, dec:40.2567, type:"star", mag:2.2, color:0xfff4ea, west:"Sadr · 天鵝座 γ", hip:100453, desc:"星官「天津」。北十字中心星。"},
+                {name:"天津二", ra:296.2437, dec:45.1308, type:"star", mag:2.86, color:0xd6e3ff, west:"Fawaris · 天鵝座 δ", hip:97165, desc:"中國星官「天津」的成員星，同時也是天鵝座連線圖形上的一顆星。"},
+                {name:"奚仲二", ra:292.4265, dec:51.7298, type:"star", mag:3.76, color:0xe0e9ff, west:"天鵝座 ι", hip:95853, desc:"中國星官「奚仲」的成員星，同時也是天鵝座連線圖形上的一顆星。"},
+                {name:"奚仲一", ra:289.2757, dec:53.3685, type:"star", mag:3.8, color:0xffe9d7, west:"Fawaris · 天鵝座 κ", hip:94779, desc:"中國星官「奚仲」的成員星，同時也是天鵝座連線圖形上的一顆星。"},
+                {name:"天津四", ra:310.358, dec:45.2803, type:"star", mag:1.25, color:0xffffff, west:"Deneb · 天鵝座 α", hip:102098, desc:"星官「天津」。遙遠而巨大的遠古白超巨星，夏季大三角頂點之一。"},
+                {name:"輦道增五", ra:299.0765, dec:35.0834, type:"star", mag:3.89, color:0xffe6d2, west:"天鵝座 η", hip:98110, desc:"中國星官「輦道」的成員星，同時也是天鵝座連線圖形上的一顆星。"},
+                {name:"輦道增七", ra:292.6803, dec:27.9597, type:"star", mag:3.05, color:0xffcc44, west:"Albireo · 天鵝座 β1", hip:95947, desc:"星官「輦道」。全天最美麗的彩色雙星，望遠鏡下呈現琥珀金與藍寶石色澤。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [6, 2], [2, 7], [7, 8]]
+            },
+            { id:"aquila", name:"天鷹座", nameEn:"Aquila",
+              stars:[
+                {name:"河鼓三", ra:296.5649, dec:10.6133, type:"star", mag:2.72, color:0xffcc88, west:"Tarazed · 天鷹座 γ", hip:97278, desc:"星官「河鼓」。牛郎星旁的陪伴亮星。"},
+                {name:"河鼓二", ra:297.6958, dec:8.8683, type:"star", mag:0.77, color:0xffffff, west:"Altair · 天鷹座 α", hip:97649, desc:"星官「河鼓」。牛郎星。自轉極快，赤道因離心力明顯向外鼓起。"},
+                {name:"河鼓一", ra:298.8283, dec:6.4068, type:"star", mag:3.71, color:0xffeddd, west:"Alshain · 天鷹座 β", hip:98036, desc:"中國星官「河鼓」的成員星，同時也是天鷹座連線圖形上的一顆星。"},
+                {name:"天桴一", ra:302.8262, dec:-0.8215, type:"star", mag:3.24, color:0xd2e0ff, west:"天鷹座 θ", hip:99473, desc:"中國星官「天桴」的成員星，同時也是天鷹座連線圖形上的一顆星。"},
+                {name:"天桴四", ra:298.1182, dec:1.0057, type:"star", mag:3.87, color:0xfff7ee, west:"Tarazed · 天鷹座 η", hip:97804, desc:"中國星官「天桴」的成員星，同時也是天鷹座連線圖形上的一顆星。"},
+                {name:"右旗三", ra:291.3746, dec:3.1148, type:"star", mag:3.36, color:0xeff1ff, west:"Almizan · 天鷹座 δ", hip:95501, desc:"中國星官「右旗」的成員星，同時也是天鷹座連線圖形上的一顆星。"},
+                {name:"天市左垣六", ra:286.3525, dec:13.8635, type:"star", mag:2.99, color:0xd7e3ff, west:"Okab · 天鷹座 ζ", hip:93747, desc:"中國星官「天市左垣」的成員星，同時也是天鷹座連線圖形上的一顆星。"},
+                {name:"天弁七", ra:286.5622, dec:-4.8826, type:"star", mag:3.43, color:0xd1dfff, west:"Al Thalimain Prior · 天鷹座 λ", hip:93805, desc:"中國星官「天弁」的成員星，同時也是天鷹座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 1], [1, 5], [5, 7]]
+            },
+            { id:"hercules", name:"武仙座", nameEn:"Hercules",
+              stars:[
+                {name:"天市右垣二", ra:245.4801, dec:19.1531, type:"star", mag:3.74, color:0xedf0ff, west:"武仙座 γ", hip:80170, desc:"中國星官「天市右垣」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"天市右垣一", ra:247.555, dec:21.4896, type:"star", mag:2.78, color:0xffe9d7, west:"Kornephoros · 武仙座 β", hip:80816, desc:"中國星官「天市右垣」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"天紀二", ra:250.3215, dec:31.6027, type:"star", mag:2.81, color:0xfff6ed, west:"Rutilicus · 武仙座 ζ", hip:81693, desc:"中國星官「天紀」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"天紀增一", ra:250.724, dec:38.9223, type:"star", mag:3.48, color:0xffead9, west:"武仙座 η", hip:81833, desc:"中國星官「天紀」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"七公增十五", ra:248.5258, dec:42.437, type:"star", mag:4.2, color:0xd6e2ff, west:"武仙座 σ", hip:81126, desc:"中國星官「七公」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"七公二", ra:244.9352, dec:46.3134, type:"star", mag:3.91, color:0xceddff, west:"武仙座 τ", hip:79992, desc:"中國星官「七公」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"七公三", ra:242.1924, dec:44.9349, type:"star", mag:4.23, color:0xd4e1ff, west:"武仙座 φ", hip:79101, desc:"中國星官「七公」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"七公四", ra:238.1689, dec:42.4515, type:"star", mag:4.6, color:0xfffaf4, west:"武仙座 χ", hip:77760, desc:"中國星官「七公」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"天紀三", ra:255.0724, dec:30.9264, type:"star", mag:3.92, color:0xd5e2ff, west:"武仙座 ε", hip:83207, desc:"中國星官「天紀」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"女床一", ra:258.7618, dec:36.8092, type:"star", mag:3.16, color:0xffd8b8, west:"武仙座 π", hip:84380, desc:"中國星官「女床」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"天紀九", ra:269.0633, dec:37.2505, type:"star", mag:3.86, color:0xffdbbd, west:"武仙座 θ", hip:87808, desc:"中國星官「天紀」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"女床三", ra:260.9206, dec:37.1459, type:"star", mag:4.15, color:0xd6e3ff, west:"武仙座 ρ", hip:85112, desc:"中國星官「女床」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"天市左垣一", ra:258.758, dec:24.8392, type:"star", mag:3.12, color:0xdbe6ff, west:"Sarin · 武仙座 δ", hip:84379, desc:"中國星官「天市左垣」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"天市左垣三", ra:266.6147, dec:27.7207, type:"star", mag:3.42, color:0xfff1e5, west:"武仙座 μ", hip:86974, desc:"中國星官「天市左垣」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"中山增一", ra:269.4412, dec:29.2479, type:"star", mag:3.7, color:0xffe9d8, west:"武仙座 ξ", hip:87933, desc:"中國星官「中山」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"天市左垣四", ra:271.8856, dec:28.7625, type:"star", mag:3.84, color:0xd5e2ff, west:"武仙座 ο", hip:88794, desc:"中國星官「天市左垣」的成員星，同時也是武仙座連線圖形上的一顆星。"},
+                {name:"帝座", ra:258.6619, dec:14.3903, type:"star", mag:3.31, color:0xff5522, west:"Rasalgethi · 武仙座 α1", hip:84345, desc:"星官「帝座」。美麗的紅超巨星雙星系統。"},
+                {name:"M13 武仙座球狀星團", ra:250.4, dec:36.5, type:"cluster", color:0xffffdd, desc:"北半球最宏偉的球狀星團，包含數十萬顆古老的恆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [2, 8], [3, 9], [10, 11], [11, 9], [9, 8], [8, 12], [12, 13], [13, 14], [14, 15], [16, 1]]
+            },
+            { id:"ophiuchus", name:"蛇夫座", nameEn:"Ophiuchus",
+              stars:[
+                {name:"天市左垣九", ra:269.7566, dec:-9.7736, type:"star", mag:3.32, color:0xffe7d4, west:"Sinistra · 蛇夫座 ν", hip:88048, desc:"中國星官「天市左垣」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"宗正二", ra:266.9732, dec:2.7073, type:"star", mag:3.75, color:0xd9e5ff, west:"Muliphen · 蛇夫座 γ", hip:87108, desc:"中國星官「宗正」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"宗正一", ra:265.8681, dec:4.5673, type:"star", mag:2.76, color:0xffe1c8, west:"Cebalrai · 蛇夫座 β", hip:86742, desc:"中國星官「宗正」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"候", ra:263.7336, dec:12.56, type:"star", mag:2.08, color:0xd0e0ff, west:"Rasalhague · 蛇夫座 α", hip:86032, desc:"星官「候」。蛇夫座主星。"},
+                {name:"斛二", ra:254.4171, dec:9.375, type:"star", mag:3.19, color:0xffe1c9, west:"蛇夫座 κ", hip:83000, desc:"中國星官「斛」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"列肆二", ra:247.7284, dec:1.9839, type:"star", mag:3.82, color:0xd8e4ff, west:"Marfik · 蛇夫座 λ", hip:80883, desc:"中國星官「列肆」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"天市右垣九", ra:243.5864, dec:-3.6943, type:"star", mag:2.73, color:0xffd4b0, west:"Yed Prior · 蛇夫座 δ", hip:79593, desc:"中國星官「天市右垣」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"天市右垣十", ra:244.5804, dec:-4.6925, type:"star", mag:3.23, color:0xffe8d6, west:"Yed Posterior · 蛇夫座 ε", hip:79882, desc:"中國星官「天市右垣」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"天市右垣十一", ra:249.2897, dec:-10.5671, type:"star", mag:2.54, color:0xd9e4ff, west:"Saik · 蛇夫座 ζ", hip:81377, desc:"中國星官「天市右垣」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"天市左垣十一", ra:257.5945, dec:-15.7249, type:"star", mag:2.43, color:0xdae5ff, west:"Sabik · 蛇夫座 η", hip:84012, desc:"中國星官「天市左垣」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"東鹹一", ra:247.7849, dec:-16.6127, type:"star", mag:4.29, color:0xffead8, west:"蛇夫座 φ", hip:80894, desc:"中國星官「東鹹」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"東鹹二", ra:246.756, dec:-18.4563, type:"star", mag:4.22, color:0xe5ecff, west:"蛇夫座 χ", hip:80569, desc:"中國星官「東鹹」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"東鹹三", ra:246.0258, dec:-20.0373, type:"star", mag:4.48, color:0xffe7d4, west:"蛇夫座 ψ", hip:80343, desc:"中國星官「東鹹」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"心宿增四", ra:246.3963, dec:-23.4472, type:"star", mag:4.57, color:0xe6ecff, west:"蛇夫座 ρ", hip:80473, desc:"中國星官「心宿」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"天江三", ra:260.5024, dec:-24.9995, type:"star", mag:3.27, color:0xcbdcff, west:"Garafsa · 蛇夫座 θ", hip:84970, desc:"中國星官「天江」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"糠", ra:261.8386, dec:-29.867, type:"star", mag:4.28, color:0xf9f7ff, west:"蛇夫座 d", hip:85423, desc:"中國星官「糠」的成員星，同時也是蛇夫座連線圖形上的一顆星。"},
+                {name:"巴納德星", ra:269.4, dec:4.7, type:"star", mag:9.5, color:0xff3300, desc:"全天自行速度（夜空位置移動速度）最快的恆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [4, 8], [8, 10], [10, 11], [11, 12], [12, 13], [2, 9], [9, 14], [14, 15]]
+            },
+            { id:"serpens", name:"巨蛇座", nameEn:"Serpens",
+              stars:[
+                {name:"天市右垣五", ra:236.5469, dec:15.4218, type:"star", mag:3.65, color:0xdbe6ff, west:"Nasak Shamiya · 巨蛇座 β", hip:77233, desc:"中國星官「天市右垣」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"周增七", ra:235.3877, dec:19.6704, type:"star", mag:4.51, color:0xdae5ff, west:"巨蛇座 ι", hip:76852, desc:"中國星官「周」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"周增八", ra:237.1849, dec:18.1416, type:"star", mag:4.09, color:0xffd3af, west:"Gudja · 巨蛇座 κ", hip:77450, desc:"中國星官「周」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"天市右垣四", ra:239.1133, dec:15.6616, type:"star", mag:3.85, color:0xfffefb, west:"巨蛇座 γ", hip:78072, desc:"中國星官「天市右垣」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"天市右垣六", ra:233.7006, dec:10.5389, type:"star", mag:3.8, color:0xeaeeff, west:"Nasak Yamani · 巨蛇座 δ", hip:76276, desc:"中國星官「天市右垣」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"天市右垣七", ra:236.067, dec:6.4256, type:"star", mag:2.63, color:0xffaa44, west:"Unukalhai · 巨蛇座 α", hip:77070, desc:"星官「天市右垣」。意為蛇的心臟。"},
+                {name:"天市右垣八", ra:237.704, dec:4.4777, type:"star", mag:3.71, color:0xe0e9ff, west:"巨蛇座 ε", hip:77622, desc:"中國星官「天市右垣」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"天市右垣九", ra:243.5864, dec:-3.6943, type:"star", mag:2.73, color:0xffd4b0, west:"Yed Prior · 巨蛇座 δ", hip:79593, desc:"中國星官「天市右垣」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"天市左垣十一", ra:257.5945, dec:-15.7249, type:"star", mag:2.43, color:0xdae5ff, west:"Sabik · 巨蛇座 η", hip:84012, desc:"中國星官「天市左垣」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"天市左垣十", ra:264.3967, dec:-15.3986, type:"star", mag:3.54, color:0xe9eeff, west:"巨蛇座 ξ", hip:86263, desc:"中國星官「天市左垣」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"天市左垣九", ra:269.7566, dec:-9.7736, type:"star", mag:3.32, color:0xffe7d4, west:"Sinistra · 巨蛇座 ν", hip:88048, desc:"中國星官「天市左垣」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"市樓三", ra:270.7705, dec:-8.1803, type:"star", mag:4.77, color:0xfaf8ff, west:"巨蛇座 τ", hip:88404, desc:"中國星官「市樓」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"天市左垣八", ra:275.3275, dec:-2.8988, type:"star", mag:3.23, color:0xffe9d7, west:"巨蛇座 η", hip:89962, desc:"中國星官「天市左垣」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"天市左垣七", ra:284.0549, dec:4.2036, type:"star", mag:4.62, color:0xe1e9ff, west:"Alya · 巨蛇座 θ1", hip:92946, desc:"中國星官「天市左垣」的成員星，同時也是巨蛇座連線圖形上的一顆星。"},
+                {name:"老鷹星雲 (M16)", ra:274.7, dec:-13.8, type:"nebula", color:0xff5555, desc:"哈伯望遠鏡著名照片「創生柱」的所在地。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 0], [0, 4], [4, 5], [5, 6], [6, 7], [8, 9], [9, 10], [10, 11], [11, 12], [12, 13]]
+            },
+            { id:"pegasus", name:"飛馬座", nameEn:"Pegasus",
+              stars:[
+                {name:"杵二", ra:332.4969, dec:33.1782, type:"star", mag:4.28, color:0xfffffc, west:"飛馬座 π", hip:109410, desc:"中國星官「杵（危宿）」的成員星，同時也是飛馬座連線圖形上的一顆星。"},
+                {name:"離宮四", ra:340.7506, dec:30.2212, type:"star", mag:2.93, color:0xffeddd, west:"Matar · 飛馬座 η", hip:112158, desc:"中國星官「離宮」的成員星，同時也是飛馬座連線圖形上的一顆星。"},
+                {name:"室宿二", ra:345.9436, dec:28.0828, type:"star", mag:2.44, color:0xffaa66, west:"Scheat · 飛馬座 β", hip:113881, desc:"星官「室宿」。飛馬座四邊形右上角紅巨星。"},
+                {name:"壁宿二", ra:2.0969, dec:29.0904, type:"star", mag:2.07, color:0xd4e2ff, west:"Alpheratz · 飛馬座 α", hip:677, desc:"中國星官「壁宿」的成員星，同時也是飛馬座連線圖形上的一顆星。"},
+                {name:"壁宿一", ra:3.309, dec:15.1836, type:"star", mag:2.83, color:0xd0e0ff, west:"Algenib · 飛馬座 γ", hip:1067, desc:"星官「壁宿」。飛馬座四邊形左下角星。"},
+                {name:"室宿一", ra:346.1902, dec:15.2053, type:"star", mag:2.49, color:0xd0e0ff, west:"Markab · 飛馬座 α", hip:113963, desc:"星官「室宿」。飛馬座四邊形右下角星。"},
+                {name:"雷電二", ra:341.6733, dec:12.1729, type:"star", mag:4.2, color:0xfffdf9, west:"Suudalnujum · 飛馬座 ξ", hip:112447, desc:"中國星官「雷電」的成員星，同時也是飛馬座連線圖形上的一顆星。"},
+                {name:"雷電一", ra:340.3655, dec:10.8314, type:"star", mag:3.41, color:0xd1e0ff, west:"Homam · 飛馬座 ζ", hip:112029, desc:"中國星官「雷電」的成員星，同時也是飛馬座連線圖形上的一顆星。"},
+                {name:"危宿二", ra:332.5499, dec:6.1979, type:"star", mag:3.52, color:0xdce6ff, west:"Biham · 飛馬座 θ", hip:109427, desc:"中國星官「危宿」的成員星，同時也是飛馬座連線圖形上的一顆星。"},
+                {name:"危宿三", ra:326.0465, dec:9.875, type:"star", mag:2.38, color:0xffbb55, west:"Enif · 飛馬座 ε", hip:107315, desc:"星官「危宿」。飛馬座最亮的恆星，代表馬的鼻子。"},
+                {name:"離宮二", ra:342.5008, dec:24.6016, type:"star", mag:3.51, color:0xffe9d8, west:"Sadalbari · 飛馬座 μ", hip:112748, desc:"中國星官「離宮」的成員星，同時也是飛馬座連線圖形上的一顆星。"},
+                {name:"離宮一", ra:341.6328, dec:23.5657, type:"star", mag:3.97, color:0xffe4cf, west:"Sadalnazi · 飛馬座 λ", hip:112440, desc:"中國星官「離宮」的成員星，同時也是飛馬座連線圖形上的一顆星。"},
+                {name:"臼三", ra:331.7528, dec:25.3451, type:"star", mag:3.77, color:0xfffaff, west:"飛馬座 ι", hip:109176, desc:"中國星官「臼」的成員星，同時也是飛馬座連線圖形上的一顆星。"},
+                {name:"臼二", ra:326.1614, dec:25.645, type:"star", mag:4.14, color:0xfdf9ff, west:"飛馬座 κ", hip:107354, desc:"中國星官「臼」的成員星，同時也是飛馬座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [5, 2], [2, 10], [10, 11], [11, 12], [12, 13]]
+            },
+            { id:"draco", name:"天龍座", nameEn:"Draco",
+              stars:[
+                {name:"天棓一", ra:268.3822, dec:56.8726, type:"star", mag:3.73, color:0xffe0c8, west:"Grumium · 天龍座 ξ", hip:87585, desc:"中國星官「天棓」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"天棓四", ra:269.1515, dec:51.4889, type:"star", mag:2.24, color:0xffd6b4, west:"Eltanin · 天龍座 γ", hip:87833, desc:"中國星官「天棓」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"天棓三", ra:262.6082, dec:52.3014, type:"star", mag:2.79, color:0xffe9d6, west:"Rastaban · 天龍座 β", hip:85670, desc:"中國星官「天棓」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"天棓二", ra:263.0668, dec:55.173, type:"star", mag:4.86, color:0xebefff, west:"Kuma · 天龍座 ν2", hip:85829, desc:"中國星官「天棓」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"天廚一", ra:288.1388, dec:67.6615, type:"star", mag:3.07, color:0xffe7d4, west:"Altais · 天龍座 δ", hip:94376, desc:"中國星官「天廚」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"柱史", ra:275.1893, dec:71.3378, type:"star", mag:4.22, color:0xd1e0ff, west:"Aldhiba · 天龍座 φ", hip:89908, desc:"中國星官「柱史」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"紫微左垣四", ra:257.1966, dec:65.7147, type:"star", mag:3.17, color:0xcfdfff, west:"Aldhibah · 天龍座 ζ", hip:83895, desc:"中國星官「紫微左垣」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"紫微左垣三", ra:245.9979, dec:61.5142, type:"star", mag:2.73, color:0xffead9, west:"Athebyne · 天龍座 η", hip:80331, desc:"中國星官「紫微左垣」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"紫微左垣二", ra:240.4723, dec:58.5653, type:"star", mag:4.01, color:0xfffcf7, west:"天龍座 θ", hip:78527, desc:"中國星官「紫微左垣」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"紫微左垣一", ra:231.2324, dec:58.9661, type:"star", mag:3.29, color:0xffe1c9, west:"Edasich · 天龍座 ι", hip:75458, desc:"中國星官「紫微左垣」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"紫微右垣一", ra:211.0973, dec:64.3759, type:"star", mag:3.67, color:0xffffff, west:"Thuban · 天龍座 α", hip:68756, desc:"星官「紫微右垣」。西元前 3000 年左右古埃及建造金字塔時的北極星。"},
+                {name:"紫微右垣二", ra:188.3706, dec:69.7882, type:"star", mag:3.85, color:0xd0dfff, west:"天龍座 κ", hip:61281, desc:"中國星官「紫微右垣」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"紫微右垣三", ra:172.8509, dec:69.3311, type:"star", mag:3.82, color:0xffd3af, west:"Giausar · 天龍座 λ", hip:56211, desc:"中國星官「紫微右垣」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"御女四", ra:275.2641, dec:72.7328, type:"star", mag:3.55, color:0xfffefa, west:"Alahakan · 天龍座 χ", hip:89937, desc:"中國星官「御女」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"天廚三", ra:297.0431, dec:70.2679, type:"star", mag:3.84, color:0xffebdb, west:"Tyl · 天龍座 ε", hip:97433, desc:"中國星官「天廚」的成員星，同時也是天龍座連線圖形上的一顆星。"},
+                {name:"貓眼星雲 (NGC 6543)", ra:269.6, dec:66.6, type:"nebula", color:0x33ffff, desc:"結構極為複雜的著名行星狀星雲。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 0], [0, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11], [11, 12], [5, 13], [4, 14]]
+            },
+            { id:"canes_venatici", name:"獵犬座", nameEn:"Canes Venatici",
+              stars:[
+                {name:"常陳一", ra:194.0019, dec:38.3149, type:"star", mag:2.89, color:0xffffff, west:"Cor Caroli · 獵犬座 α2", hip:63125, desc:"星官「常陳」。意為「查理之心」，是一顆高磁場的磁星雙星。"},
+                {name:"常陳四", ra:188.4356, dec:41.3575, type:"star", mag:4.24, color:0xfff9f2, west:"Chara · 獵犬座 β", hip:61317, desc:"中國星官「常陳」的成員星，同時也是獵犬座連線圖形上的一顆星。"},
+                {name:"渦狀星系 (M51)", ra:202.5, dec:47.2, type:"nebula", color:0xaabbff, desc:"經典的雙螺旋臂大星系，正在吞噬旁邊的小星系。"}
+              ],
+              lines:[[0, 1]]
+            },
+            { id:"coma_berenices", name:"后髮座", nameEn:"Coma Berenices",
+              stars:[
+                {name:"太微左垣五", ra:197.497, dec:17.5294, type:"star", mag:4.32, color:0xffffff, west:"Diadem · 后髮座 α", hip:64241, desc:"星官「太微左垣」。意為「王冠」，是一對互相繞行的聯星。"},
+                {name:"周鼎一", ra:197.9683, dec:27.8782, type:"star", mag:4.23, color:0xfff9f3, west:"后髮座 β", hip:64394, desc:"中國星官「周鼎」的成員星，同時也是后髮座連線圖形上的一顆星。"},
+                {name:"郎位一", ra:186.7345, dec:28.2684, type:"star", mag:4.35, color:0xffe2cb, west:"Al Dafirah · 后髮座 γ", hip:60742, desc:"中國星官「郎位」的成員星，同時也是后髮座連線圖形上的一顆星。"},
+                {name:"黑眼星系 (M64)", ra:194.2, dec:21.7, type:"nebula", color:0xaaaaaa, desc:"因星系核心有一條巨大的黑暗塵埃帶而得名。"}
+              ],
+              lines:[[0, 1], [1, 2]]
+            },
+            { id:"corona_borealis", name:"北冕座", nameEn:"Corona Borealis",
+              stars:[
+                {name:"貫索二", ra:233.2324, dec:31.3591, type:"star", mag:4.14, color:0xcfdeff, west:"北冕座 θ", hip:76127, desc:"中國星官「貫索」的成員星，同時也是北冕座連線圖形上的一顆星。"},
+                {name:"貫索三", ra:231.9572, dec:29.1057, type:"star", mag:3.66, color:0xeff1ff, west:"Nusakan · 北冕座 β", hip:75695, desc:"中國星官「貫索」的成員星，同時也是北冕座連線圖形上的一顆星。"},
+                {name:"貫索四", ra:233.672, dec:26.7147, type:"star", mag:2.22, color:0xd0e0ff, west:"Alphecca · 北冕座 α", hip:76267, desc:"星官「貫索」。北冕座半環狀星冠中最璀璨的中央明珠。"},
+                {name:"貫索五", ra:235.6857, dec:26.2956, type:"star", mag:3.81, color:0xd8e4ff, west:"北冕座 γ", hip:76952, desc:"中國星官「貫索」的成員星，同時也是北冕座連線圖形上的一顆星。"},
+                {name:"貫索六", ra:237.3985, dec:26.0684, type:"star", mag:4.59, color:0xffefe2, west:"北冕座 δ", hip:77512, desc:"中國星官「貫索」的成員星，同時也是北冕座連線圖形上的一顆星。"},
+                {name:"貫索七", ra:239.3969, dec:26.8779, type:"star", mag:4.14, color:0xffdfc5, west:"北冕座 ε", hip:78159, desc:"中國星官「貫索」的成員星，同時也是北冕座連線圖形上的一顆星。"},
+                {name:"貫索八", ra:240.3607, dec:29.8511, type:"star", mag:4.98, color:0xd3e1ff, west:"北冕座 ι", hip:78493, desc:"中國星官「貫索」的成員星，同時也是北冕座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]]
+            },
+            { id:"leo_minor", name:"小獅座", nameEn:"Leo Minor",
+              stars:[
+                {name:"內平二", ra:151.8573, dec:35.2447, type:"star", mag:3.79, color:0xffaa44, west:"Praecipua · 小獅座 21", hip:49593, desc:"星官「內平」。小獅座內最亮的恆星。"},
+                {name:"勢增九", ra:156.4784, dec:33.7961, type:"star", mag:4.72, color:0xe9eeff, west:"小獅座 30", hip:51056, desc:"中國星官「勢」的成員星，同時也是小獅座連線圖形上的一顆星。"},
+                {name:"勢四", ra:163.3279, dec:34.2149, type:"star", mag:3.79, color:0xffe5d1, west:"Praecipua · 小獅座 46", hip:53229, desc:"中國星官「勢」的成員星，同時也是小獅座連線圖形上的一顆星。"},
+                {name:"勢增四", ra:156.9708, dec:36.7072, type:"star", mag:4.2, color:0xffeada, west:"小獅座 β", hip:51233, desc:"中國星官「勢」的成員星，同時也是小獅座連線圖形上的一顆星。"},
+                {name:"內平增六", ra:143.5558, dec:36.3976, type:"star", mag:4.54, color:0xffead9, west:"小獅座 10", hip:46952, desc:"中國星官「內平」的成員星，同時也是小獅座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 0], [0, 4]]
+            },
+            { id:"lynx", name:"天貓座", nameEn:"Lynx",
+              stars:[
+                {name:"八谷增廿六", ra:94.9058, dec:59.011, type:"star", mag:4.44, color:0xd8e4ff, west:"天貓座 2", hip:30060, desc:"中國星官「八谷增廿」的成員星，同時也是天貓座連線圖形上的一顆星。"},
+                {name:"八谷增卅", ra:104.3192, dec:58.4228, type:"star", mag:4.35, color:0xffedde, west:"天貓座 15", hip:33449, desc:"中國星官「八谷增卅」的成員星，同時也是天貓座連線圖形上的一顆星。"},
+                {name:"座旗增九", ra:111.6785, dec:49.2115, type:"star", mag:4.61, color:0xd6e3ff, west:"天貓座 21", hip:36145, desc:"中國星官「座旗」的成員星，同時也是天貓座連線圖形上的一顆星。"},
+                {name:"上臺增四", ra:125.7088, dec:43.1881, type:"star", mag:4.25, color:0xffd5b2, west:"Alsciaukat · 天貓座 31", hip:41075, desc:"中國星官「上臺」的成員星，同時也是天貓座連線圖形上的一顆星。"},
+                {name:"軒轅一", ra:135.1599, dec:41.7829, type:"star", mag:3.96, color:0xfffffc, west:"天貓座 10", hip:44248, desc:"中國星官「軒轅」的成員星，同時也是天貓座連線圖形上的一顆星。"},
+                {name:"軒轅三", ra:139.711, dec:36.8026, type:"star", mag:3.82, color:0xdbe5ff, west:"天貓座 38", hip:45688, desc:"中國星官「軒轅」的成員星，同時也是天貓座連線圖形上的一顆星。"},
+                {name:"軒轅四", ra:140.2638, dec:34.3926, type:"star", mag:3.13, color:0xffaa44, west:"α Lyncis · 天貓座 α", hip:45860, desc:"星官「軒轅」。天貓座唯一有希臘字母標註的星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]]
+            },
+            { id:"camelopardalis", name:"鹿豹座", nameEn:"Camelopardalis",
+              stars:[
+                {name:"八谷五", ra:74.3217, dec:53.7521, type:"star", mag:4.43, color:0xd5e2ff, west:"鹿豹座 7", hip:23040, desc:"中國星官「八谷」的成員星，同時也是鹿豹座連線圖形上的一顆星。"},
+                {name:"八谷增十四", ra:75.8545, dec:60.4422, type:"star", mag:4.03, color:0xffffaa, west:"鹿豹座 β", hip:23522, desc:"星官「八谷」。北天大型暗星座鹿豹座的主星。"},
+                {name:"紫微右垣六", ra:73.5125, dec:66.3427, type:"star", mag:4.26, color:0xd6e3ff, west:"鹿豹座 α", hip:22783, desc:"中國星官「紫微右垣」的成員星，同時也是鹿豹座連線圖形上的一顆星。"},
+                {name:"槓一", ra:57.5896, dec:71.3323, type:"star", mag:4.59, color:0xdae5ff, west:"鹿豹座 γ", hip:17959, desc:"中國星官「槓」的成員星，同時也是鹿豹座連線圖形上的一顆星。"},
+                {name:"上丞增一", ra:57.3803, dec:65.526, type:"star", mag:4.39, color:0xffcca1, west:"鹿豹座 δ", hip:17884, desc:"中國星官「上丞」的成員星，同時也是鹿豹座連線圖形上的一顆星。"},
+                {name:"傳舍七", ra:52.2672, dec:59.9403, type:"star", mag:4.21, color:0xfcf9ff, west:"鹿豹座 ε", hip:16228, desc:"中國星官「傳舍」的成員星，同時也是鹿豹座連線圖形上的一顆星。"},
+                {name:"上衛增二", ra:94.7116, dec:69.3198, type:"star", mag:4.76, color:0xd8e4ff, west:"鹿豹座 ζ", hip:29997, desc:"中國星官「上衛」的成員星，同時也是鹿豹座連線圖形上的一顆星。"},
+                {name:"六甲二", ra:105.0168, dec:76.9774, type:"star", mag:4.55, color:0xffdabd, west:"鹿豹座 η", hip:33694, desc:"中國星官「六甲」的成員星，同時也是鹿豹座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [2, 6], [6, 7]]
+            },
+            { id:"canis_minor", name:"小犬座", nameEn:"Canis Minor",
+              stars:[
+                {name:"南河三", ra:114.8255, dec:5.225, type:"star", mag:0.34, color:0xfff4ea, west:"Procyon · 小犬座 α", hip:37279, desc:"星官「南河」。全天第八亮星，冬季大三角的成員之一，附帶一顆白矮星伴星。"},
+                {name:"南河二", ra:111.7877, dec:8.2893, type:"star", mag:2.89, color:0xd0e0ff, west:"Gomeisa · 小犬座 β", hip:36188, desc:"星官「南河」。快速自轉的 B 型星。"}
+              ],
+              lines:[[0, 1]]
+            },
+            { id:"lacerta", name:"蠍虎座", nameEn:"Lacerta",
+              stars:[
+                {name:"螣蛇十", ra:335.8901, dec:52.229, type:"star", mag:4.42, color:0xffe6d2, west:"蠍虎座 β", hip:110538, desc:"中國星官「螣蛇」的成員星，同時也是蠍虎座連線圖形上的一顆星。"},
+                {name:"螣蛇一", ra:337.8229, dec:50.2825, type:"star", mag:3.76, color:0xffffff, west:"蠍虎座 α", hip:111169, desc:"星官「螣蛇」。位於銀河邊緣的小型暗星座主星。"},
+                {name:"車府增十九", ra:337.3826, dec:47.7069, type:"star", mag:4.34, color:0xffd1ab, west:"蠍虎座 5", hip:111022, desc:"中國星官「車府」的成員星，同時也是蠍虎座連線圖形上的一顆星。"},
+                {name:"車府三", ra:335.2564, dec:46.5366, type:"star", mag:4.55, color:0xd0dfff, west:"蠍虎座 2", hip:110351, desc:"中國星官「車府」的成員星，同時也是蠍虎座連線圖形上的一顆星。"},
+                {name:"車府增九", ra:337.6219, dec:43.1234, type:"star", mag:4.52, color:0xd1e0ff, west:"蠍虎座 6", hip:111104, desc:"中國星官「車府」的成員星，同時也是蠍虎座連線圖形上的一顆星。"},
+                {name:"車府二", ra:340.1286, dec:44.2763, type:"star", mag:4.5, color:0xffdcbf, west:"蠍虎座 11", hip:111944, desc:"中國星官「車府」的成員星，同時也是蠍虎座連線圖形上的一顆星。"},
+                {name:"螣蛇二", ra:336.1291, dec:49.4764, type:"star", mag:4.55, color:0xdce6ff, west:"蠍虎座 4", hip:110609, desc:"中國星官「螣蛇」的成員星，同時也是蠍虎座連線圖形上的一顆星。"},
+                {name:"蠍虎座 η", ra:333.4697, dec:39.7149, type:"star", mag:4.5, color:0xffdabb, west:"蠍虎座 η", hip:109754, desc:"近南極星區，中國古代星官未涵蓋此星；為蠍虎座連線圖形上的一顆星。"},
+                {name:"杵一", ra:333.9924, dec:37.7487, type:"star", mag:4.14, color:0xffd8b8, west:"蠍虎座 1", hip:109937, desc:"中國星官「杵（危宿）」的成員星，同時也是蠍虎座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 2], [2, 6], [6, 0], [4, 7], [7, 8]]
+            },
+            { id:"delphinus", name:"海豚座", nameEn:"Delphinus",
+              stars:[
+                {name:"敗瓜一", ra:308.3032, dec:11.3033, type:"star", mag:4.03, color:0xcfdeff, west:"Aldulfin · 海豚座 ε", hip:101421, desc:"中國星官「敗瓜」的成員星，同時也是海豚座連線圖形上的一顆星。"},
+                {name:"瓠瓜四", ra:309.3873, dec:14.5951, type:"star", mag:3.64, color:0xfdf9ff, west:"Rotanev · 海豚座 β", hip:101769, desc:"中國星官「瓠瓜」的成員星，同時也是海豚座連線圖形上的一顆星。"},
+                {name:"瓠瓜一", ra:309.9095, dec:15.9121, type:"star", mag:3.77, color:0xd0e0ff, west:"Sualocin · 海豚座 α", hip:101958, desc:"星官「瓠瓜」。英文名字是天文學家 Nicolaus 的倒寫。"},
+                {name:"瓠瓜二", ra:311.6619, dec:16.1241, type:"star", mag:4.27, color:0xffe5d1, west:"Al Salib · 海豚座 γ2", hip:102532, desc:"中國星官「瓠瓜」的成員星，同時也是海豚座連線圖形上的一顆星。"},
+                {name:"瓠瓜三", ra:310.8647, dec:15.0746, type:"star", mag:3.63, color:0xd0e0ff, west:"Rotanev · 海豚座 δ", hip:102281, desc:"星官「瓠瓜」。英文名字是 Venator 的倒寫。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 1]]
+            },
+            { id:"equuleus", name:"小馬座", nameEn:"Equuleus",
+              stars:[
+                {name:"虛宿二", ra:318.956, dec:5.2478, type:"star", mag:3.92, color:0xfff4ea, west:"Kitalpha · 小馬座 α", hip:104987, desc:"星官「虛宿」。全天面積第二小的星座的主星。"},
+                {name:"司非二", ra:318.6201, dec:10.007, type:"star", mag:4.47, color:0xfffcf7, west:"小馬座 δ", hip:104858, desc:"中國星官「司非」的成員星，同時也是小馬座連線圖形上的一顆星。"},
+                {name:"司非一", ra:317.5854, dec:10.1316, type:"star", mag:4.7, color:0xe9eeff, west:"小馬座 γ", hip:104521, desc:"中國星官「司非」的成員星，同時也是小馬座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2]]
+            },
+            { id:"sagitta", name:"天箭座", nameEn:"Sagitta",
+              stars:[
+                {name:"左旗一", ra:295.0241, dec:18.0139, type:"star", mag:4.39, color:0xfff0e3, west:"Sham · 天箭座 α", hip:96757, desc:"中國星官「左旗」的成員星，同時也是天箭座連線圖形上的一顆星。"},
+                {name:"左旗三", ra:296.8469, dec:18.5343, type:"star", mag:4.39, color:0xffffaa, west:"α Sagittae · 天箭座 δ", hip:97365, desc:"星官「左旗」。亮黃色亮巨星。"},
+                {name:"左旗五", ra:299.6893, dec:19.4921, type:"star", mag:3.51, color:0xffd4b1, west:"天箭座 γ", hip:98337, desc:"中國星官「左旗」的成員星，同時也是天箭座連線圖形上的一顆星。"},
+                {name:"左旗二", ra:295.2622, dec:17.476, type:"star", mag:4.39, color:0xffe5d1, west:"天箭座 β", hip:96837, desc:"中國星官「左旗」的成員星，同時也是天箭座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [3, 1]]
+            },
+            { id:"vulpecula", name:"狐狸座", nameEn:"Vulpecula",
+              stars:[
+                {name:"齊增三", ra:289.0543, dec:21.3904, type:"star", mag:4.76, color:0xd3e1ff, west:"狐狸座 1", hip:94703, desc:"中國星官「齊」的成員星，同時也是狐狸座連線圖形上的一顆星。"},
+                {name:"齊增五", ra:292.1764, dec:24.6649, type:"star", mag:4.44, color:0xffd6b5, west:"Anser · 狐狸座 α", hip:95771, desc:"中國星官「齊」的成員星，同時也是狐狸座連線圖形上的一顆星。"},
+                {name:"左旗增十七", ra:298.3654, dec:24.0796, type:"star", mag:4.57, color:0xd4e1ff, west:"狐狸座 13", hip:97886, desc:"中國星官「左旗」的成員星，同時也是狐狸座連線圖形上的一顆星。"},
+                {name:"左旗增十", ra:300.2752, dec:27.7536, type:"star", mag:4.66, color:0xe3eaff, west:"狐狸座 15", hip:98543, desc:"中國星官「左旗」的成員星，同時也是狐狸座連線圖形上的一顆星。"},
+                {name:"左旗增十二", ra:303.9422, dec:27.8142, type:"star", mag:4.5, color:0xffdec3, west:"狐狸座 23", hip:99874, desc:"中國星官「左旗」的成員星，同時也是狐狸座連線圖形上的一顆星。"},
+                {name:"啞鈴星雲 (M27)", ra:299.9, dec:22.7, type:"nebula", color:0x33ffaa, desc:"人類發現的第一個行星狀星雲，外觀如一對啞鈴。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4]]
+            },
+            { id:"aries", name:"白羊座", nameEn:"Aries",
+              stars:[
+                {name:"胃宿三", ra:42.496, dec:27.2605, type:"star", mag:3.61, color:0xd0dfff, west:"Bharani · 白羊座 c", hip:13209, desc:"中國星官「胃宿」的成員星，同時也是白羊座連線圖形上的一顆星。"},
+                {name:"婁宿三", ra:31.7934, dec:23.4624, type:"star", mag:2.01, color:0xffaa66, west:"Hamal · 白羊座 α", hip:9884, desc:"星官「婁宿」。白羊座最亮星，橙色巨星。"},
+                {name:"婁宿一", ra:28.66, dec:20.808, type:"star", mag:2.64, color:0xffffff, west:"Sheratan · 白羊座 β", hip:8903, desc:"星官「婁宿」。光譜雙星。"},
+                {name:"婁宿二", ra:28.3826, dec:19.2939, type:"star", mag:3.88, color:0xd4e1ff, west:"Mesarthim · 白羊座 γ1", hip:8832, desc:"中國星官「婁宿」的成員星，同時也是白羊座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3]]
+            },
+            { id:"taurus", name:"金牛座", nameEn:"Taurus",
+              stars:[
+                {name:"天關", ra:84.4112, dec:21.1425, type:"star", mag:2.97, color:0xcedeff, west:"Tianguan · 金牛座 ζ", hip:26451, desc:"中國星官「天關」的成員星，同時也是金牛座連線圖形上的一顆星。"},
+                {name:"畢宿五", ra:68.9802, dec:16.5093, type:"star", mag:0.85, color:0xff7744, west:"Aldebaran · 金牛座 α", hip:21421, desc:"星官「畢宿」。紅色巨星，金牛的眼睛，冬季六邊形之一。"},
+                {name:"畢宿增十三", ra:67.1656, dec:15.8709, type:"star", mag:3.4, color:0xe2eaff, west:"Chamukuy · 金牛座 θ2", hip:20894, desc:"中國星官「畢宿」的成員星，同時也是金牛座連線圖形上的一顆星。"},
+                {name:"畢宿四", ra:64.9483, dec:15.6276, type:"star", mag:3.65, color:0xffe8d5, west:"Prima Hyadum · 金牛座 γ", hip:20205, desc:"中國星官「畢宿」的成員星，同時也是金牛座連線圖形上的一顆星。"},
+                {name:"畢宿三", ra:65.7337, dec:17.5425, type:"star", mag:3.77, color:0xffe7d4, west:"Secunda Hyadum · 金牛座 δ", hip:20455, desc:"中國星官「畢宿」的成員星，同時也是金牛座連線圖形上的一顆星。"},
+                {name:"畢宿一", ra:67.1542, dec:19.1804, type:"star", mag:3.53, color:0xffe6d2, west:"Ain · 金牛座 ε", hip:20889, desc:"中國星官「畢宿」的成員星，同時也是金牛座連線圖形上的一顆星。"},
+                {name:"五車五", ra:81.573, dec:28.6075, type:"star", mag:1.65, color:0xd0e0ff, west:"Elnath · 金牛座 β", hip:25428, desc:"星官「五車」。金牛座的牛角尖，與御夫座共用。"},
+                {name:"畢宿八", ra:60.1701, dec:12.4903, type:"star", mag:3.41, color:0xd1dfff, west:"金牛座 λ", hip:18724, desc:"中國星官「畢宿」的成員星，同時也是金牛座連線圖形上的一顆星。"},
+                {name:"天廩三", ra:51.7923, dec:9.7327, type:"star", mag:3.73, color:0xd2e0ff, west:"金牛座 ξ", hip:16083, desc:"中國星官「天廩」的成員星，同時也是金牛座連線圖形上的一顆星。"},
+                {name:"畢宿增三", ra:60.7891, dec:5.9893, type:"star", mag:3.91, color:0xd8e4ff, west:"金牛座 ν", hip:18907, desc:"中國星官「畢宿」的成員星，同時也是金牛座連線圖形上的一顆星。"},
+                {name:"天廩四", ra:51.2033, dec:9.0289, type:"star", mag:3.61, color:0xffebdb, west:"金牛座 ο", hip:15900, desc:"中國星官「天廩」的成員星，同時也是金牛座連線圖形上的一顆星。"},
+                {name:"天囷增十五", ra:54.2183, dec:0.4017, type:"star", mag:4.29, color:0xfff9f3, west:"金牛座 10", hip:16852, desc:"中國星官「天囷」的成員星，同時也是金牛座連線圖形上的一顆星。"},
+                {name:"昴宿星團 (M45)", ra:56.8, dec:24.1, type:"cluster", color:0x88ccff, desc:"七姊妹星團。夜空最璀璨的藍色年輕疏散星團。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [3, 7], [7, 8], [8, 9], [8, 10], [10, 11]]
+            },
+            { id:"gemini", name:"雙子座", nameEn:"Gemini",
+              stars:[
+                {name:"鉞", ra:93.7194, dec:22.5068, type:"star", mag:3.31, color:0xffd3af, west:"Propus · 雙子座 η", hip:29655, desc:"中國星官「鉞」的成員星，同時也是雙子座連線圖形上的一顆星。"},
+                {name:"井宿一", ra:95.7401, dec:22.5136, type:"star", mag:2.87, color:0xffd3ae, west:"Tejat · 雙子座 μ", hip:30343, desc:"中國星官「井宿」的成員星，同時也是雙子座連線圖形上的一顆星。"},
+                {name:"井宿五", ra:100.983, dec:25.1311, type:"star", mag:3.06, color:0xffdabc, west:"Mebsuta · 雙子座 ε", hip:32246, desc:"中國星官「井宿」的成員星，同時也是雙子座連線圖形上的一顆星。"},
+                {name:"五諸侯二", ra:107.7849, dec:30.2452, type:"star", mag:4.41, color:0xffdec3, west:"雙子座 τ", hip:34693, desc:"中國星官「五諸侯（井宿）」的成員星，同時也是雙子座連線圖形上的一顆星。"},
+                {name:"北河二", ra:113.6494, dec:31.8883, type:"star", mag:1.58, color:0xffffff, west:"Castor · 雙子座 α", hip:36850, desc:"星官「北河」。雙子座哥哥，在望遠鏡下是一組複雜的六合星系統。"},
+                {name:"北河三", ra:116.329, dec:28.0262, type:"star", mag:1.14, color:0xffaa55, west:"Pollux · 雙子座 β", hip:37826, desc:"星官「北河」。雙子座弟弟，橙色巨星，已發現有行星環繞。"},
+                {name:"五諸侯四", ra:113.9806, dec:26.8957, type:"star", mag:4.06, color:0xffd5b3, west:"雙子座 υ", hip:36962, desc:"中國星官「五諸侯（井宿）」的成員星，同時也是雙子座連線圖形上的一顆星。"},
+                {name:"天樽二", ra:110.0307, dec:21.9823, type:"star", mag:3.5, color:0xf5f5ff, west:"Wasat · 雙子座 δ", hip:35550, desc:"中國星官「天樽」的成員星，同時也是雙子座連線圖形上的一顆星。"},
+                {name:"井宿七", ra:106.0272, dec:20.5703, type:"star", mag:4.01, color:0xffebda, west:"Mekbuda · 雙子座 ζ", hip:34088, desc:"中國星官「井宿」的成員星，同時也是雙子座連線圖形上的一顆星。"},
+                {name:"井宿三", ra:99.4279, dec:16.3993, type:"star", mag:1.93, color:0xd0e0ff, west:"Alhena · 雙子座 γ", hip:31681, desc:"星官「井宿」。雙子的腳部。"},
+                {name:"井宿四", ra:101.3224, dec:12.8956, type:"star", mag:3.35, color:0xfffbff, west:"Alzirr · 雙子座 ξ", hip:32362, desc:"中國星官「井宿」的成員星，同時也是雙子座連線圖形上的一顆星。"},
+                {name:"井宿八", ra:109.5232, dec:16.5404, type:"star", mag:3.58, color:0xdde7ff, west:"雙子座 λ", hip:35350, desc:"中國星官「井宿」的成員星，同時也是雙子座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [7, 11]]
+            },
+            { id:"cancer", name:"巨蟹座", nameEn:"Cancer",
+              stars:[
+                {name:"柳宿增三", ra:134.6218, dec:11.8577, type:"star", mag:4.26, color:0xe0e8ff, west:"Acubens · 巨蟹座 α", hip:44066, desc:"中國星官「柳宿」的成員星，同時也是巨蟹座連線圖形上的一顆星。"},
+                {name:"鬼宿四", ra:131.1712, dec:18.1543, type:"star", mag:3.94, color:0xfff4ea, west:"Asellus Australis · 巨蟹座 δ", hip:42911, desc:"星官「鬼宿」。巨蟹座中心亮星。"},
+                {name:"鬼宿三", ra:130.8214, dec:21.4685, type:"star", mag:4.66, color:0xd7e3ff, west:"Asellus Borealis · 巨蟹座 γ", hip:42806, desc:"中國星官「鬼宿」的成員星，同時也是巨蟹座連線圖形上的一顆星。"},
+                {name:"軒轅增廿二", ra:131.6666, dec:28.7651, type:"star", mag:4.03, color:0xffe7d3, west:"Zubanah · 巨蟹座 ι", hip:43103, desc:"中國星官「軒轅增廿」的成員星，同時也是巨蟹座連線圖形上的一顆星。"},
+                {name:"柳宿增十", ra:124.1288, dec:9.1855, type:"star", mag:3.53, color:0xffd7b6, west:"Tarf · 巨蟹座 β", hip:40526, desc:"中國星官「柳宿」的成員星，同時也是巨蟹座連線圖形上的一顆星。"},
+                {name:"蜂巢星團 (M44)", ra:130.1, dec:19.7, type:"cluster", color:0xffffaa, desc:"鬼宿星團。肉眼可見的朦朧星雲狀星團。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [1, 4]]
+            },
+            { id:"leo", name:"獅子座", nameEn:"Leo",
+              stars:[
+                {name:"軒轅十四", ra:152.093, dec:11.9672, type:"star", mag:1.35, color:0xd0e0ff, west:"Regulus · 獅子座 α", hip:49669, desc:"星官「軒轅」。獅子之心。位於黃道上的藍白主序星。"},
+                {name:"軒轅十三", ra:151.8331, dec:16.7627, type:"star", mag:3.48, color:0xd5e2ff, west:"Al Jabhah · 獅子座 η", hip:49583, desc:"中國星官「軒轅」的成員星，同時也是獅子座連線圖形上的一顆星。"},
+                {name:"軒轅十二", ra:154.9931, dec:19.8415, type:"star", mag:2.01, color:0xffcc44, west:"Algieba · 獅子座 γ1", hip:50583, desc:"星官「軒轅」。獅子鐮刀結構上的美麗金黃雙星。"},
+                {name:"太微右垣五", ra:168.5271, dec:20.5237, type:"star", mag:2.56, color:0xdfe8ff, west:"Zosma · 獅子座 δ", hip:54872, desc:"中國星官「太微右垣」的成員星，同時也是獅子座連線圖形上的一顆星。"},
+                {name:"五帝座一", ra:177.2649, dec:14.5721, type:"star", mag:2.14, color:0xffffff, west:"Denebola · 獅子座 β", hip:57632, desc:"星官「五帝座」。獅子的尾巴，春季大三角頂點之一。"},
+                {name:"太微右垣四", ra:168.56, dec:15.4296, type:"star", mag:3.33, color:0xd6e3ff, west:"Chertan · 獅子座 θ", hip:54879, desc:"中國星官「太微右垣」的成員星，同時也是獅子座連線圖形上的一顆星。"},
+                {name:"軒轅十一", ra:154.1726, dec:23.4173, type:"star", mag:3.43, color:0xedf1ff, west:"Adhafera · 獅子座 ζ", hip:50335, desc:"中國星官「軒轅」的成員星，同時也是獅子座連線圖形上的一顆星。"},
+                {name:"軒轅十", ra:148.1909, dec:26.007, type:"star", mag:3.88, color:0xffdfc5, west:"Rasalas · 獅子座 μ", hip:48455, desc:"中國星官「軒轅」的成員星，同時也是獅子座連線圖形上的一顆星。"},
+                {name:"軒轅九", ra:146.4628, dec:23.7743, type:"star", mag:2.97, color:0xffeee1, west:"Algenubi · 獅子座 ε", hip:47908, desc:"中國星官「軒轅」的成員星，同時也是獅子座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [2, 6], [6, 7], [7, 8]]
+            },
+            { id:"virgo", name:"室女座", nameEn:"Virgo",
+              stars:[
+                {name:"內屏二", ra:176.4648, dec:6.5294, type:"star", mag:4.04, color:0xffd6b5, west:"室女座 ν", hip:57380, desc:"中國星官「內屏」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"太微右垣一", ra:177.6738, dec:1.7647, type:"star", mag:3.59, color:0xfffcf8, west:"Zavijava · 室女座 β", hip:57757, desc:"中國星官「太微右垣」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"太微左垣一", ra:184.9765, dec:-0.6668, type:"star", mag:3.89, color:0xd8e4ff, west:"Zaniah · 室女座 η", hip:60129, desc:"中國星官「太微左垣」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"太微左垣二", ra:190.4152, dec:-1.4494, type:"star", mag:2.74, color:0xf4f5ff, west:"Porrima · 室女座 γ", hip:61941, desc:"中國星官「太微左垣」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"平道一", ra:197.4875, dec:-5.539, type:"star", mag:4.38, color:0xd6e3ff, west:"Apami-Atsa · 室女座 θ", hip:64238, desc:"中國星官「平道」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"角宿一", ra:201.2982, dec:-11.1613, type:"star", mag:0.98, color:0xd0e0ff, west:"Spica · 室女座 α", hip:65474, desc:"星官「角宿」。純淨的藍白巨星，春季大三角頂點之一。"},
+                {name:"亢宿二", ra:214.0036, dec:-6.0005, type:"star", mag:4.07, color:0xfffcf8, west:"Syrma · 室女座 ι", hip:69701, desc:"中國星官「亢宿」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"亢宿增七", ra:220.7651, dec:-5.6582, type:"star", mag:3.87, color:0xf7f6ff, west:"Rijl al Awwa · 室女座 μ", hip:71957, desc:"中國星官「亢宿」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"太微左垣四", ra:195.5442, dec:10.9592, type:"star", mag:2.85, color:0xffe9d8, west:"Vindemiatrix · 室女座 ε", hip:63608, desc:"中國星官「太微左垣」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"太微左垣三", ra:193.9009, dec:3.3975, type:"star", mag:3.39, color:0xffd4b1, west:"Minelauva · 室女座 δ", hip:63090, desc:"中國星官「太微左垣」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"角宿二", ra:203.6733, dec:-0.5958, type:"star", mag:3.38, color:0xdee7ff, west:"Heze · 室女座 ζ", hip:66249, desc:"中國星官「角宿」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"天田二", ra:210.4116, dec:1.5445, type:"star", mag:4.23, color:0xdee8ff, west:"室女座 τ", hip:68520, desc:"中國星官「天田（角宿）」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"亢宿增十", ra:221.5622, dec:1.8929, type:"star", mag:3.73, color:0xd6e3ff, west:"室女座 109", hip:72220, desc:"中國星官「亢宿」的成員星，同時也是室女座連線圖形上的一顆星。"},
+                {name:"M87 巨大橢圓星系", ra:187.7, dec:12.4, type:"nebula", color:0xffffff, desc:"人類拍攝到歷史上第一張黑洞照片的核心星系。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [8, 9], [9, 3], [4, 10], [10, 11], [11, 12]]
+            },
+            { id:"libra", name:"天秤座", nameEn:"Libra",
+              stars:[
+                {name:"折威七", ra:226.0176, dec:-25.282, type:"star", mag:3.25, color:0xffd1ab, west:"Brachium · 天秤座 σ", hip:73714, desc:"中國星官「折威」的成員星，同時也是天秤座連線圖形上的一顆星。"},
+                {name:"氐宿一", ra:222.7196, dec:-16.0418, type:"star", mag:2.75, color:0xffffff, west:"Zubenelgenubi · 天秤座 α2", hip:72622, desc:"星官「氐宿」。意為「南邊的螯」，肉眼可分開的雙星。"},
+                {name:"氐宿四", ra:229.2517, dec:-9.3829, type:"star", mag:2.61, color:0xccffcc, west:"Zubeneschamali · 天秤座 β", hip:74785, desc:"星官「氐宿」。全天極少數肉眼能看出帶有微綠色調的奇特恆星。"},
+                {name:"氐宿三", ra:233.8816, dec:-14.7895, type:"star", mag:3.91, color:0xffe7d3, west:"Zubenelhakrabi · 天秤座 γ", hip:76333, desc:"中國星官「氐宿」的成員星，同時也是天秤座連線圖形上的一顆星。"},
+                {name:"天輻一", ra:234.256, dec:-28.1351, type:"star", mag:3.6, color:0xffdabd, west:"天秤座 υ", hip:76470, desc:"中國星官「天輻」的成員星，同時也是天秤座連線圖形上的一顆星。"},
+                {name:"天輻二", ra:234.664, dec:-29.7778, type:"star", mag:3.66, color:0xccdcff, west:"天秤座 τ", hip:76600, desc:"中國星官「天輻」的成員星，同時也是天秤座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [1, 3]]
+            },
+            { id:"scorpius", name:"天蠍座", nameEn:"Scorpius",
+              stars:[
+                {name:"房宿一", ra:239.713, dec:-26.1141, type:"star", mag:2.89, color:0xccdcff, west:"Fang · 天蠍座 π", hip:78265, desc:"中國星官「房宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"房宿三", ra:240.0834, dec:-22.6217, type:"star", mag:2.29, color:0xd0dfff, west:"Dschubba · 天蠍座 δ", hip:78401, desc:"中國星官「房宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"房宿四", ra:241.3593, dec:-19.8055, type:"star", mag:2.56, color:0xd3e1ff, west:"Acrab · 天蠍座 β1", hip:78820, desc:"中國星官「房宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"心宿一", ra:245.2972, dec:-25.5928, type:"star", mag:2.9, color:0xedf0ff, west:"Alniyat · 天蠍座 σ", hip:80112, desc:"中國星官「心宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"心宿二", ra:247.3519, dec:-26.432, type:"star", mag:1.05, color:0xff4411, west:"Antares · 天蠍座 α", hip:80763, desc:"星官「心宿」。天蠍之心。火紅的超巨星，與火星爭紅。"},
+                {name:"心宿三", ra:248.9706, dec:-28.216, type:"star", mag:2.82, color:0xcadbff, west:"Paikauhale · 天蠍座 τ", hip:81266, desc:"中國星官「心宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"尾宿二", ra:252.5409, dec:-34.2932, type:"star", mag:2.29, color:0xffe2ca, west:"Larawag · 天蠍座 ε", hip:82396, desc:"中國星官「尾宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"尾宿一", ra:252.9676, dec:-38.0474, type:"star", mag:3, color:0xcbdcff, west:"Xamidimura · 天蠍座 μ1", hip:82514, desc:"中國星官「尾宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"尾宿三", ra:253.6459, dec:-42.3613, type:"star", mag:4.7, color:0xfffbff, west:"天蠍座 ζ1", hip:82671, desc:"中國星官「尾宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"尾宿四", ra:258.0383, dec:-43.2392, type:"star", mag:3.32, color:0xfffbff, west:"天蠍座 η", hip:84143, desc:"中國星官「尾宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"尾宿五", ra:264.3297, dec:-42.9978, type:"star", mag:1.86, color:0xfaf8ff, west:"Sargas · 天蠍座 θ", hip:86228, desc:"中國星官「尾宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"尾宿六", ra:266.8962, dec:-40.127, type:"star", mag:2.99, color:0xfffdf8, west:"Girtab · 天蠍座 ι1", hip:87073, desc:"中國星官「尾宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"尾宿七", ra:265.622, dec:-39.03, type:"star", mag:2.39, color:0xccddff, west:"Mula · 天蠍座 κ", hip:86670, desc:"中國星官「尾宿」的成員星，同時也是天蠍座連線圖形上的一顆星。"},
+                {name:"尾宿八", ra:263.4022, dec:-37.1038, type:"star", mag:1.62, color:0xd0e0ff, west:"Shaula · 天蠍座 λ", hip:85927, desc:"星官「尾宿」。蠍子毒針末端的亮星。"},
+                {name:"M6 蝴蝶星團", ra:265.1, dec:-32.2, type:"cluster", color:0xffffff, desc:"疏散星團，形狀酷似展翅的蝴蝶。"}
+              ],
+              lines:[[0, 1], [1, 2], [1, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11], [11, 12], [12, 13]]
+            },
+            { id:"sagittarius", name:"人馬座", nameEn:"Sagittarius",
+              stars:[
+                {name:"箕宿四", ra:274.4068, dec:-36.7617, type:"star", mag:3.1, color:0xffd4b0, west:"Hamalwarid · 人馬座 η", hip:89642, desc:"中國星官「箕宿」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"箕宿三", ra:276.043, dec:-34.3846, type:"star", mag:1.79, color:0xd0e0ff, west:"Kaus Australis · 人馬座 ε", hip:90185, desc:"星官「箕宿」。人馬座最亮星，組成「南斗六星」的一部分。"},
+                {name:"箕宿二", ra:275.2485, dec:-29.8281, type:"star", mag:2.72, color:0xffdabc, west:"Kaus Media · 人馬座 δ", hip:89931, desc:"中國星官「箕宿」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"鬥宿二", ra:276.9927, dec:-25.4217, type:"star", mag:2.82, color:0xffe6d2, west:"Kaus Borealis · 人馬座 λ", hip:90496, desc:"中國星官「鬥宿」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"鬥宿三", ra:273.4409, dec:-21.0588, type:"star", mag:3.84, color:0xe4ebff, west:"Polis · 人馬座 μ", hip:89341, desc:"中國星官「鬥宿」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"天淵二", ra:290.6596, dec:-44.459, type:"star", mag:3.96, color:0xd1e0ff, west:"Arkab Prior · 人馬座 β1", hip:95241, desc:"中國星官「天淵」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"天淵三", ra:290.9716, dec:-40.6159, type:"star", mag:3.96, color:0xd0dfff, west:"Rukbat · 人馬座 α", hip:95347, desc:"中國星官「天淵」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"鬥宿六", ra:285.653, dec:-29.8801, type:"star", mag:2.6, color:0xdae5ff, west:"Ascella · 人馬座 ζ", hip:93506, desc:"中國星官「鬥宿」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"鬥宿一", ra:281.4141, dec:-26.9908, type:"star", mag:3.17, color:0xd0dfff, west:"Namalsadirah · 人馬座 φ", hip:92041, desc:"中國星官「鬥宿」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"天淵增一", ra:298.8154, dec:-41.8683, type:"star", mag:4.12, color:0xffe4cf, west:"人馬座 ι", hip:98032, desc:"中國星官「天淵」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"天淵增二", ra:299.9341, dec:-35.2763, type:"star", mag:4.37, color:0xceddff, west:"人馬座 θ1", hip:98412, desc:"中國星官「天淵」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"狗國一", ra:298.9598, dec:-26.2995, type:"star", mag:4.7, color:0xfff1e5, west:"Terebellum · 人馬座 ω", hip:98066, desc:"中國星官「狗國」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"狗一", ra:294.1768, dec:-24.8836, type:"star", mag:4.59, color:0xd2e0ff, west:"人馬座 h2", hip:96465, desc:"中國星官「狗」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"狗二", ra:291.3187, dec:-24.5086, type:"star", mag:5.02, color:0xe7edff, west:"人馬座 χ1", hip:95477, desc:"中國星官「狗」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"狗增六", ra:288.8851, dec:-25.2567, type:"star", mag:4.86, color:0xfff9f3, west:"Al Kiladah · 人馬座 ψ", hip:94643, desc:"中國星官「狗」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"鬥宿四", ra:283.8164, dec:-26.2967, type:"star", mag:2.05, color:0xcfdeff, west:"Nunki · 人馬座 σ", hip:92855, desc:"中國星官「鬥宿」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"箕宿一", ra:271.452, dec:-30.4241, type:"star", mag:2.98, color:0xffe8d5, west:"Alnasl · 人馬座 γ2", hip:88635, desc:"中國星官「箕宿」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"鬥宿五", ra:286.735, dec:-27.6704, type:"star", mag:3.32, color:0xffe1c8, west:"人馬座 τ", hip:93864, desc:"中國星官「鬥宿」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"建二", ra:286.1708, dec:-21.7415, type:"star", mag:3.76, color:0xffe6d2, west:"Manubrij · 人馬座 ο", hip:93683, desc:"中國星官「建」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"建三", ra:287.441, dec:-21.0236, type:"star", mag:2.88, color:0xf6f5ff, west:"Albaldah · 人馬座 π", hip:94141, desc:"中國星官「建」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"建四", ra:289.4087, dec:-18.9529, type:"star", mag:4.88, color:0xffe6d2, west:"人馬座 d", hip:94820, desc:"中國星官「建」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"建五", ra:290.4182, dec:-17.8472, type:"star", mag:3.92, color:0xe6ecff, west:"人馬座 ρ1", hip:95168, desc:"中國星官「建」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"建六", ra:290.4318, dec:-15.955, type:"star", mag:4.52, color:0xdbe6ff, west:"人馬座 υ", hip:95176, desc:"中國星官「建」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"建一", ra:284.4325, dec:-21.1067, type:"star", mag:3.52, color:0xffe1ca, west:"人馬座 ξ2", hip:93085, desc:"中國星官「建」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"建增六", ra:283.5424, dec:-22.7448, type:"star", mag:4.86, color:0xffd9ba, west:"Ainalrami · 人馬座 ν1", hip:92761, desc:"中國星官「建」的成員星，同時也是人馬座連線圖形上的一顆星。"},
+                {name:"人馬座A* (銀河系中心)", ra:266.4, dec:-29.0, type:"nebula", color:0xff33aa, desc:"地球所屬銀河系核心的超大質量黑洞所在地。"},
+                {name:"礁湖星雲 (M8)", ra:270.9, dec:-24.4, type:"nebula", color:0xff4488, desc:"銀河繁星間極為宏偉著名的發射星雲。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [5, 6], [6, 7], [7, 8], [8, 3], [9, 10], [10, 11], [11, 12], [12, 13], [13, 14], [14, 15], [15, 8], [8, 2], [2, 16], [16, 1], [1, 7], [7, 17], [17, 15], [15, 18], [18, 19], [19, 20], [20, 21], [21, 22], [18, 23], [23, 24], [24, 15]]
+            },
+            { id:"capricornus", name:"摩羯座", nameEn:"Capricornus",
+              stars:[
+                {name:"牛宿增六", ra:304.412, dec:-12.5082, type:"star", mag:4.3, color:0xffead8, west:"Prima Giedi · 摩羯座 α1", hip:100027, desc:"中國星官「牛宿」的成員星，同時也是摩羯座連線圖形上的一顆星。"},
+                {name:"牛宿一", ra:305.2528, dec:-14.7814, type:"star", mag:3.05, color:0xffefe2, west:"Dabih · 摩羯座 β", hip:100345, desc:"中國星官「牛宿」的成員星，同時也是摩羯座連線圖形上的一顆星。"},
+                {name:"牛宿六", ra:307.2151, dec:-17.8137, type:"star", mag:4.77, color:0xf7f6ff, west:"摩羯座 ρ", hip:101027, desc:"中國星官「牛宿」的成員星，同時也是摩羯座連線圖形上的一顆星。"},
+                {name:"天田四", ra:311.5239, dec:-25.2709, type:"star", mag:4.13, color:0xfdf9ff, west:"Wei · 摩羯座 ψ", hip:102485, desc:"中國星官「天田（牛宿）」的成員星，同時也是摩羯座連線圖形上的一顆星。"},
+                {name:"天田二", ra:312.9554, dec:-26.9191, type:"star", mag:4.12, color:0xffd2ae, west:"摩羯座 ω", hip:102978, desc:"中國星官「天田（牛宿）」的成員星，同時也是摩羯座連線圖形上的一顆星。"},
+                {name:"燕", ra:321.6668, dec:-22.4113, type:"star", mag:3.77, color:0xffe7d3, west:"Yen · 摩羯座 ζ", hip:105881, desc:"中國星官「燕」的成員星，同時也是摩羯座連線圖形上的一顆星。"},
+                {name:"壘壁陣四", ra:326.7602, dec:-16.1273, type:"star", mag:2.85, color:0xffffff, west:"Deneb Algedi · 摩羯座 δ", hip:107556, desc:"星官「壘壁陣」。摩羯座的山羊尾巴星。"},
+                {name:"壘壁陣三", ra:325.0227, dec:-16.6623, type:"star", mag:3.69, color:0xeff1ff, west:"Nashira · 摩羯座 γ", hip:106985, desc:"中國星官「壘壁陣」的成員星，同時也是摩羯座連線圖形上的一顆星。"},
+                {name:"代一", ra:320.5617, dec:-16.8345, type:"star", mag:4.28, color:0xffebdb, west:"摩羯座 ι", hip:105515, desc:"中國星官「代」的成員星，同時也是摩羯座連線圖形上的一顆星。"},
+                {name:"秦一", ra:316.4868, dec:-17.2329, type:"star", mag:4.08, color:0xd6e3ff, west:"摩羯座 θ", hip:104139, desc:"中國星官「秦」的成員星，同時也是摩羯座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 0]]
+            },
+            { id:"aquarius", name:"寶瓶座", nameEn:"Aquarius",
+              stars:[
+                {name:"女宿一", ra:311.919, dec:-9.4958, type:"star", mag:3.78, color:0xd6e3ff, west:"Albali · 寶瓶座 ε", hip:102618, desc:"中國星官「女宿」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"女宿二", ra:313.1635, dec:-8.9833, type:"star", mag:4.73, color:0xeff2ff, west:"Albulan · 寶瓶座 μ", hip:103045, desc:"中國星官「女宿」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"虛宿一", ra:322.8897, dec:-5.5712, type:"star", mag:2.9, color:0xfff4ea, west:"Sadalsuud · 寶瓶座 β", hip:106278, desc:"星官「虛宿」。黃色超巨星。"},
+                {name:"危宿一", ra:331.446, dec:-0.3199, type:"star", mag:2.95, color:0xffe8d5, west:"Sadalmelik · 寶瓶座 α", hip:109074, desc:"中國星官「危宿」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"墳墓二", ra:335.4141, dec:-1.3873, type:"star", mag:3.86, color:0xd3e1ff, west:"Sadachbia · 寶瓶座 γ", hip:110395, desc:"中國星官「墳墓」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"墳墓一", ra:337.208, dec:-0.02, type:"star", mag:3.65, color:0xfaf8ff, west:"Sadaltager · 寶瓶座 ζ1", hip:110960, desc:"中國星官「墳墓」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"墳墓三", ra:338.8391, dec:-0.1175, type:"star", mag:4.04, color:0xd1e0ff, west:"寶瓶座 η", hip:111497, desc:"中國星官「墳墓」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"壘壁陣七", ra:343.1536, dec:-7.5796, type:"star", mag:3.73, color:0xffd3ae, west:"Hydor · 寶瓶座 λ", hip:112961, desc:"中國星官「壘壁陣」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"羽林軍卅八", ra:349.4759, dec:-9.1825, type:"star", mag:4.41, color:0xcedeff, west:"寶瓶座 ψ2", hip:115033, desc:"中國星官「羽林軍卅」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"羽林軍廿八", ra:347.3617, dec:-21.1724, type:"star", mag:3.68, color:0xffe0c6, west:"寶瓶座 c2", hip:114341, desc:"中國星官「羽林軍廿」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"壘壁陣五", ra:331.6093, dec:-13.8697, type:"star", mag:4.29, color:0xd2e0ff, west:"寶瓶座 ι", hip:109139, desc:"中國星官「壘壁陣」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"泣二", ra:334.2085, dec:-7.7833, type:"star", mag:4.17, color:0xffe8d5, west:"Ancha · 寶瓶座 θ", hip:110003, desc:"中國星官「泣」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"墳墓四", ra:336.3193, dec:1.3774, type:"star", mag:4.8, color:0xccddff, west:"Seat · 寶瓶座 π", hip:110672, desc:"中國星官「墳墓」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"羽林軍卅四", ra:350.7426, dec:-20.1006, type:"star", mag:3.96, color:0xffe4ce, west:"寶瓶座 b1", hip:115438, desc:"中國星官「羽林軍卅」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"鈇鉞增一", ra:355.4409, dec:-17.8165, type:"star", mag:4.82, color:0xffeee0, west:"寶瓶座 A2", hip:116901, desc:"中國星官「鈇鉞」的成員星，同時也是寶瓶座連線圖形上的一顆星。"},
+                {name:"上帝之眼 (NGC 7293)", ra:337.4, dec:-20.8, type:"nebula", color:0x33ffcc, desc:"螺旋星雲。距離最近的行星狀星雲，極像一隻深邃的宇宙之眼。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [2, 10], [3, 11], [5, 12], [13, 8], [8, 14]]
+            },
+            { id:"pisces", name:"雙魚座", nameEn:"Pisces",
+              stars:[
+                {name:"奎宿十四", ra:18.4373, dec:24.5837, type:"star", mag:4.67, color:0xffe5d0, west:"雙魚座 φ", hip:5742, desc:"中國星官「奎宿」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"奎宿十一", ra:17.9152, dec:30.0896, type:"star", mag:4.51, color:0xffe3cd, west:"雙魚座 τ", hip:5586, desc:"中國星官「奎宿」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"奎宿十三", ra:19.8666, dec:27.2641, type:"star", mag:4.74, color:0xd8e4ff, west:"雙魚座 υ", hip:6193, desc:"中國星官「奎宿」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"奎宿十五", ra:17.8634, dec:21.0347, type:"star", mag:4.66, color:0xffe6d2, west:"雙魚座 χ", hip:5571, desc:"中國星官「奎宿」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"右更二", ra:22.8709, dec:15.3458, type:"star", mag:3.62, color:0xffe8d5, west:"Alpherg · 雙魚座 η", hip:7097, desc:"中國星官「右更」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"右更四", ra:26.3485, dec:9.1577, type:"star", mag:4.26, color:0xffe9d7, west:"Torcular · 雙魚座 ο", hip:8198, desc:"中國星官「右更」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"外屏七", ra:30.5118, dec:2.7638, type:"star", mag:3.82, color:0xffffff, west:"Alrescha · 雙魚座 α", hip:9487, desc:"星官「外屏」。意為「繩索」，是兩條魚結紮在一起的交點位置。"},
+                {name:"外屏六", ra:28.389, dec:3.1875, type:"star", mag:4.61, color:0xffead8, west:"雙魚座 ξ", hip:8833, desc:"中國星官「外屏」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"外屏五", ra:25.3579, dec:5.4876, type:"star", mag:4.45, color:0xffdbbe, west:"雙魚座 ν", hip:7884, desc:"中國星官「外屏」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"外屏四", ra:22.5463, dec:6.1438, type:"star", mag:4.84, color:0xffdabc, west:"雙魚座 μ", hip:7007, desc:"中國星官「外屏」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"外屏三", ra:18.4329, dec:7.5754, type:"star", mag:5.21, color:0xeff1ff, west:"Revati · 雙魚座 ζ", hip:5737, desc:"中國星官「外屏」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"外屏二", ra:15.7359, dec:7.8901, type:"star", mag:4.27, color:0xffe9d7, west:"雙魚座 ε", hip:4906, desc:"中國星官「外屏」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"外屏一", ra:12.1706, dec:7.5851, type:"star", mag:4.44, color:0xffd6b5, west:"Kuton · 雙魚座 δ", hip:3786, desc:"中國星官「外屏」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"霹靂五", ra:359.8279, dec:6.8633, type:"star", mag:4.03, color:0xfcf9ff, west:"雙魚座 ω", hip:118268, desc:"中國星官「霹靂」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"霹靂四", ra:354.9877, dec:5.6263, type:"star", mag:4.13, color:0xfffdf9, west:"雙魚座 ι", hip:116771, desc:"中國星官「霹靂」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"霹靂三", ra:351.9921, dec:6.379, type:"star", mag:4.27, color:0xffe5cf, west:"雙魚座 θ", hip:115830, desc:"中國星官「霹靂」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"霹靂增四", ra:350.0858, dec:5.3813, type:"star", mag:5.05, color:0xffe0c6, west:"雙魚座 b", hip:115227, desc:"中國星官「霹靂」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"霹靂二", ra:349.2914, dec:3.2823, type:"star", mag:3.7, color:0xffead9, west:"雙魚座 γ", hip:114971, desc:"中國星官「霹靂」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"雲雨一", ra:351.7331, dec:1.2556, type:"star", mag:4.95, color:0xd9e4ff, west:"雙魚座 κ", hip:115738, desc:"中國星官「雲雨」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"雲雨四", ra:355.5117, dec:1.78, type:"star", mag:4.49, color:0xe4ebff, west:"雙魚座 λ", hip:116928, desc:"中國星官「雲雨」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"雲雨增七", ra:356.598, dec:3.4868, type:"star", mag:4.95, color:0xffc99b, west:"雙魚座 19", hip:117245, desc:"中國星官「雲雨」的成員星，同時也是雙魚座連線圖形上的一顆星。"},
+                {name:"霹靂一", ra:345.9692, dec:3.82, type:"star", mag:4.48, color:0xd0dfff, west:"Fumalsamakah · 雙魚座 β", hip:113889, desc:"中國星官「霹靂」的成員星，同時也是雙魚座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 0], [0, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11], [11, 12], [12, 13], [13, 14], [14, 15], [15, 16], [16, 17], [17, 18], [18, 19], [19, 20], [20, 14], [17, 21]]
+            },
+            { id:"orion", name:"獵戶座", nameEn:"Orion",
+              stars:[
+                {name:"水府一", ra:91.893, dec:14.7685, type:"star", mag:4.42, color:0xcdddff, west:"獵戶座 ν", hip:29038, desc:"中國星官「水府」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"司怪四", ra:88.5958, dec:20.2762, type:"star", mag:4.39, color:0xfff8f1, west:"獵戶座 χ1", hip:27913, desc:"中國星官「司怪」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"司怪三", ra:90.9799, dec:20.1385, type:"star", mag:4.64, color:0xe7edff, west:"獵戶座 χ2", hip:28716, desc:"中國星官「司怪」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"水府二", ra:92.985, dec:14.2088, type:"star", mag:4.45, color:0xccdcff, west:"獵戶座 ξ", hip:29426, desc:"中國星官「水府」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參宿增十八", ra:90.5958, dec:9.6473, type:"star", mag:4.12, color:0xe2eaff, west:"獵戶座 μ", hip:28614, desc:"中國星官「參宿」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參宿四", ra:88.7929, dec:7.4071, type:"star", mag:0.42, color:0xff4422, west:"Betelgeuse · 獵戶座 α", hip:27989, desc:"星官「參宿」。紅色超巨星，已到生命末期，可能在不久的將來發生超新星爆炸。"},
+                {name:"參宿五", ra:81.2828, dec:6.3497, type:"star", mag:1.64, color:0xc9dbff, west:"Bellatrix · 獵戶座 γ", hip:25336, desc:"中國星官「參宿」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參旗四", ra:73.7239, dec:10.1508, type:"star", mag:4.64, color:0xdce6ff, west:"獵戶座 π1", hip:22845, desc:"中國星官「參旗」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參旗九", ra:74.6371, dec:1.714, type:"star", mag:4.47, color:0xffdabc, west:"獵戶座 π6", hip:23123, desc:"中國星官「參旗」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參旗八", ra:73.5629, dec:2.4407, type:"star", mag:3.71, color:0xccdcff, west:"獵戶座 π5", hip:22797, desc:"中國星官「參旗」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參旗七", ra:72.8015, dec:5.6051, type:"star", mag:3.68, color:0xcdddff, west:"獵戶座 π4", hip:22549, desc:"中國星官「參旗」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參旗六", ra:72.46, dec:6.9613, type:"star", mag:3.19, color:0xfffefb, west:"Tabit · 獵戶座 π3", hip:22449, desc:"中國星官「參旗」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參旗五", ra:72.653, dec:8.9002, type:"star", mag:4.35, color:0xd7e3ff, west:"Al Taj · 獵戶座 π2", hip:22509, desc:"中國星官「參旗」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參旗二", ra:74.0928, dec:13.5145, type:"star", mag:4.06, color:0xffe1c9, west:"獵戶座 ο2", hip:22957, desc:"中國星官「參旗」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參旗增四", ra:76.1423, dec:15.4041, type:"star", mag:4.65, color:0xd3e1ff, west:"獵戶座 11", hip:23607, desc:"中國星官「參旗」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參旗增五", ra:77.4248, dec:15.5972, type:"star", mag:4.81, color:0xeef1ff, west:"獵戶座 15", hip:24010, desc:"中國星官「參旗」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參宿七", ra:78.6345, dec:-8.2016, type:"star", mag:0.18, color:0xd0e0ff, west:"Rigel · 獵戶座 β", hip:24436, desc:"星官「參宿」。藍白超巨星，全天極耀眼的恆星。"},
+                {name:"參宿增三", ra:81.1192, dec:-2.3971, type:"star", mag:3.35, color:0xc8daff, west:"Saif al Jabbar · 獵戶座 η", hip:25281, desc:"中國星官「參宿」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參宿三", ra:83.0017, dec:-0.2991, type:"star", mag:2.25, color:0xccddff, west:"Mintaka · 獵戶座 δ", hip:25930, desc:"中國星官「參宿」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"觜宿一", ra:83.7845, dec:9.9342, type:"star", mag:3.39, color:0xcdddff, west:"Meissa · 獵戶座 λ", hip:26207, desc:"中國星官「觜宿」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參宿一", ra:85.1897, dec:-1.9426, type:"star", mag:1.74, color:0xcbdcff, west:"Alnitak · 獵戶座 ζ", hip:26727, desc:"中國星官「參宿」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參宿六", ra:86.9391, dec:-9.6696, type:"star", mag:2.07, color:0xcdddff, west:"Saiph · 獵戶座 κ", hip:27366, desc:"中國星官「參宿」的成員星，同時也是獵戶座連線圖形上的一顆星。"},
+                {name:"參宿二", ra:84.0534, dec:-1.2019, type:"star", mag:1.69, color:0xd0e0ff, west:"Alnilam · 獵戶座 ε", hip:26311, desc:"星官「參宿」。獵戶座正中央腰帶三星的主星。"},
+                {name:"M42 獵戶座大星雲", ra:83.8, dec:-5.4, type:"nebula", color:0xff66bb, desc:"肉眼可見的巨大宇宙育嬰室，大量新恆星在此誕生。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [8, 9], [9, 10], [10, 11], [11, 12], [12, 7], [7, 13], [13, 14], [14, 15], [16, 17], [17, 18], [18, 6], [6, 19], [19, 5], [5, 20], [20, 21], [20, 22], [22, 18]]
+            },
+            { id:"canis_major", name:"大犬座", nameEn:"Canis Major",
+              stars:[
+                {name:"軍市一", ra:95.6749, dec:-17.9559, type:"star", mag:1.98, color:0xc8daff, west:"Mirzam · 大犬座 β", hip:30324, desc:"中國星官「軍市」的成員星，同時也是大犬座連線圖形上的一顆星。"},
+                {name:"天狼", ra:101.2872, dec:-16.7161, type:"star", mag:-1.46, color:0xffffff, west:"Sirius · 大犬座 α", hip:32349, desc:"星官「天狼」。夜空中最亮的恆星，散發無與倫比的白光，距太陽系僅 8.6 光年。"},
+                {name:"軍市增五", ra:105.7561, dec:-23.8333, type:"star", mag:3.02, color:0xd2e0ff, west:"Al Zara · 大犬座 ο2", hip:33977, desc:"中國星官「軍市」的成員星，同時也是大犬座連線圖形上的一顆星。"},
+                {name:"弧矢一", ra:107.0979, dec:-26.3932, type:"star", mag:1.83, color:0xfff5eb, west:"Wezen · 大犬座 δ", hip:34444, desc:"中國星官「弧矢」的成員星，同時也是大犬座連線圖形上的一顆星。"},
+                {name:"弧矢增二", ra:105.4298, dec:-27.9348, type:"star", mag:3.49, color:0xffd0a8, west:"Unurgunite · 大犬座 σ", hip:33856, desc:"中國星官「弧矢」的成員星，同時也是大犬座連線圖形上的一顆星。"},
+                {name:"弧矢七", ra:104.6565, dec:-28.9721, type:"star", mag:1.5, color:0xd0e0ff, west:"Adhara · 大犬座 ε", hip:33579, desc:"星官「弧矢」。全天夜空中最強烈的紫外線輻射源。"},
+                {name:"孫增一", ra:95.0783, dec:-30.0634, type:"star", mag:3.02, color:0xcdddff, west:"Furud · 大犬座 ζ", hip:30122, desc:"中國星官「孫」的成員星，同時也是大犬座連線圖形上的一顆星。"},
+                {name:"弧矢二", ra:111.0238, dec:-29.3031, type:"star", mag:2.45, color:0xd1e0ff, west:"Aludra · 大犬座 η", hip:35904, desc:"中國星官「弧矢」的成員星，同時也是大犬座連線圖形上的一顆星。"},
+                {name:"天狼增五", ra:104.0343, dec:-17.0542, type:"star", mag:4.36, color:0xd3e1ff, west:"大犬座 ι", hip:33347, desc:"中國星官「天狼」的成員星，同時也是大犬座連線圖形上的一顆星。"},
+                {name:"天狼增四", ra:105.9396, dec:-15.6333, type:"star", mag:4.11, color:0xd0dfff, west:"Muliphein · 大犬座 γ", hip:34045, desc:"中國星官「天狼」的成員星，同時也是大犬座連線圖形上的一顆星。"},
+                {name:"天狼增二", ra:103.5475, dec:-12.0386, type:"star", mag:4.08, color:0xffd9ba, west:"大犬座 θ", hip:33160, desc:"中國星官「天狼」的成員星，同時也是大犬座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [7, 3], [1, 8], [8, 9], [9, 10], [10, 8]]
+            },
+            { id:"carina", name:"船底座", nameEn:"Carina",
+              stars:[
+                {name:"老人增二", ra:99.4403, dec:-43.1959, type:"star", mag:3.17, color:0xd0dfff, west:"船底座 ν", hip:31685, desc:"中國星官「老人」的成員星，同時也是船底座連線圖形上的一顆星。"},
+                {name:"老人", ra:95.988, dec:-52.6957, type:"star", mag:-0.74, color:0xffffff, west:"Canopus · 船底座 α", hip:30438, desc:"星官「老人」。全夜空第二亮星，南半球航海導航的耀眼地標。"},
+                {name:"南船五", ra:138.2999, dec:-69.7172, type:"star", mag:1.67, color:0xdbe6ff, west:"Miaplacidus · 船底座 β", hip:45238, desc:"中國星官「南船」的成員星，同時也是船底座連線圖形上的一顆星。"},
+                {name:"南船四", ra:153.4342, dec:-70.0379, type:"star", mag:3.29, color:0xd2e0ff, west:"船底座 ω", hip:50099, desc:"中國星官「南船」的成員星，同時也是船底座連線圖形上的一顆星。"},
+                {name:"南船三", ra:160.7392, dec:-64.3945, type:"star", mag:2.74, color:0xc9dbff, west:"船底座 θ", hip:52419, desc:"中國星官「南船」的成員星，同時也是船底座連線圖形上的一顆星。"},
+                {name:"南船二", ra:158.0061, dec:-61.6853, type:"star", mag:3.3, color:0xd1e0ff, west:"船底座 p", hip:51576, desc:"中國星官「南船」的成員星，同時也是船底座連線圖形上的一顆星。"},
+                {name:"南船一", ra:154.2707, dec:-61.3323, type:"star", mag:3.39, color:0xffd5b3, west:"船底座 q", hip:50371, desc:"中國星官「南船」的成員星，同時也是船底座連線圖形上的一顆星。"},
+                {name:"海石二", ra:139.2725, dec:-59.2752, type:"star", mag:2.21, color:0xe3ebff, west:"Aspidiske · 船底座 ι", hip:45556, desc:"中國星官「海石」的成員星，同時也是船底座連線圖形上的一顆星。"},
+                {name:"海石一", ra:125.6285, dec:-59.5095, type:"star", mag:1.86, color:0xffe0c7, west:"Avior · 船底座 ε", hip:41037, desc:"中國星官「海石」的成員星，同時也是船底座連線圖形上的一顆星。"},
+                {name:"天社增一", ra:119.1946, dec:-52.9824, type:"star", mag:3.46, color:0xccdcff, west:"船底座 χ", hip:38827, desc:"中國星官「天社」的成員星，同時也是船底座連線圖形上的一顆星。"},
+                {name:"天社一", ra:122.3831, dec:-47.3366, type:"star", mag:1.75, color:0xcedeff, west:"Regor · 船底座 γ2", hip:39953, desc:"中國星官「天社」的成員星，同時也是船底座連線圖形上的一顆星。"},
+                {name:"天社三", ra:131.1759, dec:-54.7088, type:"star", mag:1.93, color:0xd9e5ff, west:"Alsephina · 船底座 δ", hip:42913, desc:"中國星官「天社」的成員星，同時也是船底座連線圖形上的一顆星。"},
+                {name:"船底座 z", ra:166.6351, dec:-62.4241, type:"star", mag:4.62, color:0xffe7d4, west:"船底座 z", hip:54301, desc:"近南極星區，中國古代星官未涵蓋此星；為船底座連線圖形上的一顆星。"},
+                {name:"船底座 z2", ra:167.1417, dec:-61.9472, type:"star", mag:5.11, color:0xe4ebff, west:"船底座 z2", hip:54461, desc:"近南極星區，中國古代星官未涵蓋此星；為船底座連線圖形上的一顆星。"},
+                {name:"船底座 y", ra:168.1501, dec:-60.3176, type:"star", mag:4.59, color:0xfffbf6, west:"船底座 y", hip:54751, desc:"近南極星區，中國古代星官未涵蓋此星；為船底座連線圖形上的一顆星。"},
+                {name:"船底座 x", ra:167.1475, dec:-58.975, type:"star", mag:3.93, color:0xffdfc5, west:"船底座 x", hip:54463, desc:"近南極星區，中國古代星官未涵蓋此星；為船底座連線圖形上的一顆星。"},
+                {name:"船底座 u", ra:163.3736, dec:-58.8532, type:"star", mag:3.78, color:0xffe9d7, west:"船底座 u", hip:53253, desc:"近南極星區，中國古代星官未涵蓋此星；為船底座連線圖形上的一顆星。"},
+                {name:"海山二 (Eta Carinae)", ra:161.2, dec:-59.7, type:"nebula", color:0xff3333, desc:"極不穩定的超大質量高光度藍變星，周圍環繞著侏儒星雲。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11], [11, 7], [4, 12], [12, 13], [13, 14], [14, 15], [15, 16], [16, 5]]
+            },
+            { id:"centaurus", name:"半人馬座", nameEn:"Centaurus",
+              stars:[
+                {name:"半人馬座 π", ra:170.2517, dec:-54.491, type:"star", mag:3.9, color:0xcdddff, west:"半人馬座 π", hip:55425, desc:"近南極星區，中國古代星官未涵蓋此星；為半人馬座連線圖形上的一顆星。"},
+                {name:"馬尾三", ra:182.0896, dec:-50.7224, type:"star", mag:2.58, color:0xcfdeff, west:"半人馬座 δ", hip:59196, desc:"中國星官「馬尾」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"庫樓十", ra:187.0099, dec:-50.2306, type:"star", mag:3.91, color:0xcbdcff, west:"半人馬座 σ", hip:60823, desc:"中國星官「庫樓」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"庫樓七", ra:190.3793, dec:-48.9599, type:"star", mag:2.2, color:0xd5e2ff, west:"Muhlifain · 半人馬座 γ", hip:61932, desc:"中國星官「庫樓」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"南門一", ra:204.9719, dec:-53.4664, type:"star", mag:2.29, color:0xccddff, west:"半人馬座 ε", hip:66657, desc:"中國星官「南門」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"庫樓一", ra:208.8849, dec:-47.2884, type:"star", mag:2.55, color:0xccdcff, west:"Alnair · 半人馬座 ζ", hip:68002, desc:"中國星官「庫樓」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"衡二", ra:207.4041, dec:-42.4737, type:"star", mag:3.47, color:0xccddff, west:"半人馬座 μ", hip:67472, desc:"中國星官「衡」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"衡一", ra:207.3762, dec:-41.6877, type:"star", mag:3.41, color:0xc9dbff, west:"半人馬座 ν", hip:67464, desc:"中國星官「衡」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"庫樓三", ra:211.6706, dec:-36.37, type:"star", mag:2.06, color:0xffe6d3, west:"Menkent · 半人馬座 θ", hip:68933, desc:"中國星官「庫樓」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"庫樓二", ra:218.8768, dec:-42.1578, type:"star", mag:2.33, color:0xcdddff, west:"半人馬座 η", hip:71352, desc:"中國星官「庫樓」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"騎官三", ra:224.7904, dec:-42.1042, type:"star", mag:3.13, color:0xcadbff, west:"Ke Kwan · 半人馬座 κ", hip:73334, desc:"中國星官「騎官」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"柱十一", ra:200.1492, dec:-36.7123, type:"star", mag:2.75, color:0xdbe6ff, west:"半人馬座 ι", hip:65109, desc:"中國星官「柱（角宿）」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"南門二", ra:219.8962, dec:-60.8372, type:"star", mag:-0.27, color:0xffcc44, west:"Rigil Kent · 半人馬座 α1", hip:71683, desc:"星官「南門」。全天第三亮星，是包含比鄰星在內、距離我們最近的三合星系統。"},
+                {name:"馬腹一", ra:210.9559, dec:-60.373, type:"star", mag:0.61, color:0xd0e0ff, west:"Hadar · 半人馬座 β", hip:68702, desc:"星官「馬腹」。藍巨星。"},
+                {name:"馬尾二", ra:182.913, dec:-52.3685, type:"star", mag:3.97, color:0xcdddff, west:"半人馬座 ρ", hip:59449, desc:"中國星官「馬尾」的成員星，同時也是半人馬座連線圖形上的一顆星。"},
+                {name:"半人馬座 ο1", ra:172.942, dec:-59.4421, type:"star", mag:5.07, color:0xffe6d2, west:"半人馬座 ο1", hip:56243, desc:"近南極星區，中國古代星官未涵蓋此星；為半人馬座連線圖形上的一顆星。"},
+                {name:"歐米茄半人馬座球狀星團", ra:201.7, dec:-47.5, type:"cluster", color:0xffffff, desc:"NGC 5139。銀河系內最巨大、最明亮的超級球狀星團。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [7, 11], [12, 4], [4, 13], [2, 14], [14, 15]]
+            },
+            { id:"crux", name:"南十字座", nameEn:"Crux",
+              stars:[
+                {name:"十字架三", ra:191.9303, dec:-59.6888, type:"star", mag:1.25, color:0xc8daff, west:"Mimosa · 南十字座 β", hip:62434, desc:"中國星官「十字架」的成員星，同時也是南十字座連線圖形上的一顆星。"},
+                {name:"十字架四", ra:183.7863, dec:-58.7489, type:"star", mag:2.79, color:0xcbdcff, west:"Imai · 南十字座 δ", hip:59747, desc:"中國星官「十字架」的成員星，同時也是南十字座連線圖形上的一顆星。"},
+                {name:"十字架二", ra:186.6496, dec:-63.0991, type:"star", mag:0.77, color:0xd0e0ff, west:"Acrux · 南十字座 α1", hip:60718, desc:"星官「十字架」。南十字座最亮星，多用於尋找地理南極點。"},
+                {name:"十字架一", ra:187.7915, dec:-57.1132, type:"star", mag:1.59, color:0xff5533, west:"Gacrux · 南十字座 γ", hip:61084, desc:"星官「十字架」。南十字頂端的迷人紅巨星。"},
+                {name:"煤袋星雲", ra:192.0, dec:-62.5, type:"nebula", color:0x111111, desc:"銀河襯托下極為醒目的巨大黑暗吸收星雲。"}
+              ],
+              lines:[[0, 1], [2, 3]]
+            },
+            { id:"eridanus", name:"波江座", nameEn:"Eridanus",
+              stars:[
+                {name:"玉井三", ra:76.9624, dec:-5.0864, type:"star", mag:2.78, color:0xe1e9ff, west:"Cursa · 波江座 β", hip:23875, desc:"中國星官「玉井」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"九斿二", ra:71.3756, dec:-3.2547, type:"star", mag:4.01, color:0xcedeff, west:"波江座 μ", hip:22109, desc:"中國星官「九斿」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"九州殊口四", ra:69.0798, dec:-3.3525, type:"star", mag:3.93, color:0xcadbff, west:"波江座 ν", hip:21444, desc:"中國星官「九州殊口」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"九州殊口二", ra:62.9664, dec:-6.8376, type:"star", mag:4.04, color:0xf0f2ff, west:"Beid · 波江座 ο1", hip:19587, desc:"中國星官「九州殊口」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天苑一", ra:59.5074, dec:-13.5085, type:"star", mag:2.97, color:0xffd4b0, west:"Zaurak · 波江座 γ", hip:18543, desc:"中國星官「天苑」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天苑二", ra:56.5356, dec:-12.1016, type:"star", mag:4.43, color:0xffd3af, west:"波江座 π", hip:17593, desc:"中國星官「天苑」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天苑三", ra:55.8121, dec:-9.7634, type:"star", mag:3.52, color:0xffead9, west:"Rana · 波江座 δ", hip:17378, desc:"中國星官「天苑」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天苑四", ra:53.2327, dec:-9.4583, type:"star", mag:3.72, color:0xffebdb, west:"Ran · 波江座 ε", hip:16537, desc:"中國星官「天苑」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天苑六", ra:44.1069, dec:-8.8981, type:"star", mag:3.89, color:0xffe4ce, west:"Azha · 波江座 η", hip:13701, desc:"中國星官「天苑」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天苑七", ra:41.0306, dec:-13.8587, type:"star", mag:4.24, color:0xcfdeff, west:"波江座 π", hip:12770, desc:"中國星官「天苑」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天苑八", ra:41.2758, dec:-18.5726, type:"star", mag:4.47, color:0xfffefb, west:"波江座 τ1", hip:12843, desc:"中國星官「天苑」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天苑十", ra:45.5979, dec:-23.6245, type:"star", mag:4.08, color:0xe1e9ff, west:"波江座 τ3", hip:14146, desc:"中國星官「天苑」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天苑十一", ra:49.8792, dec:-21.7579, type:"star", mag:3.7, color:0xffd3af, west:"Angetenar · 波江座 τ4", hip:15474, desc:"中國星官「天苑」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天苑十二", ra:53.447, dec:-21.6329, type:"star", mag:4.26, color:0xd0dfff, west:"波江座 τ5", hip:16611, desc:"中國星官「天苑」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天苑十三", ra:56.712, dec:-23.2497, type:"star", mag:4.22, color:0xfefaff, west:"波江座 τ6", hip:17651, desc:"中國星官「天苑」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天園十二", ra:68.8877, dec:-30.5623, type:"star", mag:3.81, color:0xffe8d6, west:"Theemin · 波江座 υ2", hip:21393, desc:"中國星官「天園」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天園十一", ra:66.0092, dec:-34.0168, type:"star", mag:3.97, color:0xffd7b7, west:"Beemim · 波江座 undefined3", hip:20535, desc:"中國星官「天園」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天園十", ra:64.4736, dec:-33.7983, type:"star", mag:3.55, color:0xd0dfff, west:"Beemim · 波江座 υ4", hip:20042, desc:"中國星官「天園」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天園九", ra:57.3635, dec:-36.2003, type:"star", mag:4.17, color:0xffead8, west:"波江座 g", hip:17874, desc:"中國星官「天園」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天園增四", ra:54.2737, dec:-40.2745, type:"star", mag:4.57, color:0xffe6d2, west:"波江座 y", hip:16870, desc:"中國星官「天園」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天園增三", ra:49.9819, dec:-43.0698, type:"star", mag:4.26, color:0xfff3e8, west:"波江座 e", hip:15510, desc:"中國星官「天園」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天園六", ra:44.5653, dec:-40.3047, type:"star", mag:2.88, color:0xdfe8ff, west:"Acamar · 波江座 θ1", hip:13847, desc:"中國星官「天園」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天園增一", ra:40.1668, dec:-39.8554, type:"star", mag:4.11, color:0xffe7d3, west:"波江座 ι", hip:12486, desc:"中國星官「天園」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天園四", ra:36.7463, dec:-47.7038, type:"star", mag:4.24, color:0xcedeff, west:"波江座 κ", hip:11407, desc:"中國星官「天園」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天園三", ra:34.1274, dec:-51.5122, type:"star", mag:3.56, color:0xcfdfff, west:"波江座 φ", hip:10602, desc:"中國星官「天園」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"天園二", ra:28.9895, dec:-51.6089, type:"star", mag:3.69, color:0xffedde, west:"波江座 χ", hip:9007, desc:"中國星官「天園」的成員星，同時也是波江座連線圖形上的一顆星。"},
+                {name:"水委一", ra:24.4285, dec:-57.2368, type:"star", mag:0.45, color:0xd0e0ff, west:"Achernar · 波江座 α", hip:7588, desc:"星官「水委」。長長天河波江座的終點星，全天高速度自轉最扁的恆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11], [11, 12], [12, 13], [13, 14], [14, 15], [15, 16], [16, 17], [17, 18], [18, 19], [19, 20], [20, 21], [21, 22], [22, 23], [23, 24], [24, 25], [25, 26]]
+            },
+            { id:"columba", name:"天鴿座", nameEn:"Columba",
+              stars:[
+                {name:"孫增三", ra:95.5285, dec:-33.4364, type:"star", mag:3.85, color:0xffecdd, west:"天鴿座 δ", hip:30277, desc:"中國星官「孫」的成員星，同時也是天鴿座連線圖形上的一顆星。"},
+                {name:"子二", ra:87.74, dec:-35.7683, type:"star", mag:2.65, color:0xd0e0ff, west:"Phact · 天鴿座 β", hip:27628, desc:"星官「子」。天鴿座亮星。"},
+                {name:"丈人一", ra:84.9122, dec:-34.0741, type:"star", mag:2.65, color:0xcfdfff, west:"Phact · 天鴿座 α", hip:26634, desc:"中國星官「丈人」的成員星，同時也是天鴿座連線圖形上的一顆星。"},
+                {name:"丈人二", ra:82.8031, dec:-35.4705, type:"star", mag:3.86, color:0xffe2cb, west:"天鴿座 ε", hip:25859, desc:"中國星官「丈人」的成員星，同時也是天鴿座連線圖形上的一顆星。"},
+                {name:"老人增三", ra:89.7867, dec:-42.8151, type:"star", mag:3.96, color:0xffe2ca, west:"天鴿座 η", hip:28328, desc:"中國星官「老人」的成員星，同時也是天鴿座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [1, 4]]
+            },
+            { id:"piscis_austrinus", name:"南魚座", nameEn:"Piscis Austrinus",
+              stars:[
+                {name:"羽林軍八", ra:340.1639, dec:-27.0436, type:"star", mag:4.18, color:0xd0dfff, west:"南魚座 ε", hip:111954, desc:"中國星官「羽林軍」的成員星，同時也是南魚座連線圖形上的一顆星。"},
+                {name:"北落師門", ra:344.4127, dec:-29.6222, type:"star", mag:1.16, color:0xffffff, west:"Fomalhaut · 南魚座 α", hip:113368, desc:"星官「北落師門」。秋季南夜空孤獨亮麗的「秋季獨星」，周圍擁有巨大的行星塵埃盤。"},
+                {name:"天綱", ra:343.9871, dec:-32.5396, type:"star", mag:4.2, color:0xffe9d7, west:"南魚座 δ", hip:113246, desc:"中國星官「天綱」的成員星，同時也是南魚座連線圖形上的一顆星。"},
+                {name:"敗臼三", ra:343.1314, dec:-32.8755, type:"star", mag:4.46, color:0xd4e2ff, west:"南魚座 γ", hip:112948, desc:"中國星官「敗臼」的成員星，同時也是南魚座連線圖形上的一顆星。"},
+                {name:"敗臼增一", ra:337.8764, dec:-32.3461, type:"star", mag:4.29, color:0xd7e3ff, west:"Fum al Hui · 南魚座 β", hip:111188, desc:"中國星官「敗臼」的成員星，同時也是南魚座連線圖形上的一顆星。"},
+                {name:"天錢四", ra:332.0959, dec:-32.9885, type:"star", mag:4.5, color:0xdae5ff, west:"南魚座 μ", hip:109285, desc:"中國星官「天錢」的成員星，同時也是南魚座連線圖形上的一顆星。"},
+                {name:"天錢三", ra:326.2367, dec:-33.0258, type:"star", mag:4.35, color:0xd3e1ff, west:"南魚座 ι", hip:107380, desc:"中國星官「天錢」的成員星，同時也是南魚座連線圖形上的一顆星。"},
+                {name:"天錢二", ra:326.934, dec:-30.8983, type:"star", mag:5.02, color:0xd9e5ff, west:"南魚座 θ", hip:107608, desc:"中國星官「天錢」的成員星，同時也是南魚座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 5], [5, 0]]
+            },
+            { id:"pavo", name:"孔雀座", nameEn:"Pavo",
+              stars:[
+                {name:"孔雀十一", ra:306.4119, dec:-56.7351, type:"star", mag:1.94, color:0xd0e0ff, west:"Peacock · 孔雀座 α", hip:100751, desc:"星官「孔雀」。南天璀璨的藍色次巨星。"},
+                {name:"孔雀七", ra:311.2396, dec:-66.2032, type:"star", mag:3.42, color:0xe1e9ff, west:"孔雀座 β", hip:102395, desc:"中國星官「孔雀」的成員星，同時也是孔雀座連線圖形上的一顆星。"},
+                {name:"孔雀六", ra:302.1817, dec:-66.1821, type:"star", mag:3.55, color:0xfff1e5, west:"孔雀座 δ", hip:99240, desc:"中國星官「孔雀」的成員星，同時也是孔雀座連線圖形上的一顆星。"},
+                {name:"孔雀四", ra:283.0543, dec:-62.1876, type:"star", mag:4.22, color:0xceddff, west:"孔雀座 λ", hip:92609, desc:"中國星官「孔雀」的成員星，同時也是孔雀座連線圖形上的一顆星。"},
+                {name:"孔雀增二", ra:275.8068, dec:-61.4939, type:"star", mag:4.35, color:0xffd7b7, west:"孔雀座 ξ", hip:90098, desc:"中國星官「孔雀」的成員星，同時也是孔雀座連線圖形上的一顆星。"},
+                {name:"孔雀二", ra:272.1451, dec:-63.6686, type:"star", mag:4.33, color:0xe6ecff, west:"孔雀座 π", hip:88866, desc:"中國星官「孔雀」的成員星，同時也是孔雀座連線圖形上的一顆星。"},
+                {name:"孔雀一", ra:266.4333, dec:-64.7239, type:"star", mag:3.61, color:0xffe1c9, west:"孔雀座 η", hip:86929, desc:"中國星官「孔雀」的成員星，同時也是孔雀座連線圖形上的一顆星。"},
+                {name:"孔雀八", ra:280.7589, dec:-71.4281, type:"star", mag:4.01, color:0xffe2cb, west:"孔雀座 ζ", hip:91792, desc:"中國星官「孔雀」的成員星，同時也是孔雀座連線圖形上的一顆星。"},
+                {name:"孔雀九", ra:300.1481, dec:-72.9105, type:"star", mag:3.97, color:0xd4e2ff, west:"孔雀座 ε", hip:98495, desc:"中國星官「孔雀」的成員星，同時也是孔雀座連線圖形上的一顆星。"},
+                {name:"孔雀十", ra:321.6109, dec:-65.3662, type:"star", mag:4.21, color:0xfffdfa, west:"孔雀座 γ", hip:105858, desc:"中國星官「孔雀」的成員星，同時也是孔雀座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 1], [1, 9]]
+            },
+            { id:"grus", name:"天鶴座", nameEn:"Grus",
+              stars:[
+                {name:"鶴六", ra:345.22, dec:-52.7541, type:"star", mag:4.11, color:0xffe8d6, west:"天鶴座 ζ", hip:113638, desc:"中國星官「鶴」的成員星，同時也是天鶴座連線圖形上的一顆星。"},
+                {name:"鶴三", ra:342.1387, dec:-51.3169, type:"star", mag:3.49, color:0xdce6ff, west:"天鶴座 ε", hip:112623, desc:"中國星官「鶴」的成員星，同時也是天鶴座連線圖形上的一顆星。"},
+                {name:"鶴二", ra:340.6669, dec:-46.8846, type:"star", mag:2.07, color:0xffd3af, west:"Tiaki · 天鶴座 β", hip:112122, desc:"中國星官「鶴」的成員星，同時也是天鶴座連線圖形上的一顆星。"},
+                {name:"鶴十一", ra:337.4393, dec:-43.7492, type:"star", mag:4.12, color:0xffd4b1, west:"天鶴座 δ2", hip:111043, desc:"中國星官「鶴」的成員星，同時也是天鶴座連線圖形上的一顆星。"},
+                {name:"鶴一", ra:332.0583, dec:-46.961, type:"star", mag:1.73, color:0xd0e0ff, west:"Alnair · 天鶴座 α", hip:109268, desc:"天鶴座主星。"},
+                {name:"鶴增二", ra:337.3174, dec:-43.4956, type:"star", mag:3.97, color:0xffe6d2, west:"天鶴座 δ1", hip:110997, desc:"中國星官「鶴」的成員星，同時也是天鶴座連線圖形上的一顆星。"},
+                {name:"鶴十二", ra:333.9038, dec:-41.3467, type:"star", mag:4.79, color:0xffefe2, west:"天鶴座 μ1", hip:109908, desc:"中國星官「鶴」的成員星，同時也是天鶴座連線圖形上的一顆星。"},
+                {name:"敗臼二", ra:331.5287, dec:-39.5434, type:"star", mag:4.47, color:0xffdbbe, west:"天鶴座 λ", hip:109111, desc:"中國星官「敗臼」的成員星，同時也是天鶴座連線圖形上的一顆星。"},
+                {name:"敗臼一", ra:328.4822, dec:-37.3649, type:"star", mag:3, color:0xd1e0ff, west:"Aldhanab · 天鶴座 γ", hip:108085, desc:"中國星官「敗臼」的成員星，同時也是天鶴座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 2], [5, 6], [6, 7], [7, 8]]
+            },
+            { id:"puppis", name:"船尾座", nameEn:"Puppis",
+              stars:[
+                {name:"老人增二", ra:99.4403, dec:-43.1959, type:"star", mag:3.17, color:0xd0dfff, west:"船尾座 ν", hip:31685, desc:"中國星官「老人」的成員星，同時也是船尾座連線圖形上的一顆星。"},
+                {name:"弧矢九", ra:109.2857, dec:-37.0975, type:"star", mag:2.71, color:0xffd3af, west:"船尾座 π", hip:35264, desc:"中國星官「弧矢」的成員星，同時也是船尾座連線圖形上的一顆星。"},
+                {name:"船尾座 p", ra:113.8454, dec:-28.3693, type:"star", mag:4.65, color:0xd0dfff, west:"船尾座 p", hip:36917, desc:"近南極星區，中國古代星官未涵蓋此星；為船尾座連線圖形上的一顆星。"},
+                {name:"弧矢六", ra:114.7078, dec:-26.8038, type:"star", mag:3.8, color:0xcdddff, west:"Markab · 船尾座 κ1", hip:37229, desc:"中國星官「弧矢」的成員星，同時也是船尾座連線圖形上的一顆星。"},
+                {name:"弧矢增十七", ra:117.3236, dec:-24.8598, type:"star", mag:3.34, color:0xffdfc5, west:"Azmidi · 船尾座 ξ", hip:38170, desc:"中國星官「弧矢」的成員星，同時也是船尾座連線圖形上的一顆星。"},
+                {name:"弧矢增十五", ra:119.2147, dec:-22.8801, type:"star", mag:4.2, color:0xfff2e7, west:"船尾座 j", hip:38835, desc:"中國星官「弧矢」的成員星，同時也是船尾座連線圖形上的一顆星。"},
+                {name:"弧矢增卅二", ra:121.886, dec:-24.3043, type:"star", mag:2.83, color:0xfffffd, west:"Tureis · 船尾座 ρ", hip:39757, desc:"中國星官「弧矢增卅」的成員星，同時也是船尾座連線圖形上的一顆星。"},
+                {name:"弧矢增廿二", ra:120.896, dec:-40.0031, type:"star", mag:2.21, color:0x99bbff, west:"Naos · 船尾座 ζ", hip:39429, desc:"星官「弧矢增廿」。極度熾熱、全天已知光度極高的罕見 O 型超巨星。"},
+                {name:"天社一", ra:122.3831, dec:-47.3366, type:"star", mag:1.75, color:0xcedeff, west:"Regor · 船尾座 γ2", hip:39953, desc:"中國星官「天社」的成員星，同時也是船尾座連線圖形上的一顆星。"},
+                {name:"弧矢五", ra:117.0215, dec:-25.9372, type:"star", mag:4.4, color:0xd2e0ff, west:"船尾座 ο", hip:38070, desc:"中國星官「弧矢」的成員星，同時也是船尾座連線圖形上的一顆星。"},
+                {name:"弧矢增十九", ra:115.952, dec:-28.9548, type:"star", mag:3.94, color:0xe1e9ff, west:"船尾座 l", hip:37677, desc:"中國星官「弧矢」的成員星，同時也是船尾座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [4, 9], [9, 10], [10, 2]]
+            },
+            { id:"vela", name:"船帆座", nameEn:"Vela",
+              stars:[
+                {name:"天社三", ra:131.1759, dec:-54.7088, type:"star", mag:1.93, color:0xd9e5ff, west:"Alsephina · 船帆座 δ", hip:42913, desc:"中國星官「天社」的成員星，同時也是船帆座連線圖形上的一顆星。"},
+                {name:"天社五", ra:140.5284, dec:-55.0107, type:"star", mag:2.47, color:0xcedeff, west:"Markeb · 船帆座 κ", hip:45941, desc:"中國星官「天社」的成員星，同時也是船帆座連線圖形上的一顆星。"},
+                {name:"船帆座 φ", ra:149.2156, dec:-54.5678, type:"star", mag:3.52, color:0xd2e0ff, west:"船帆座 φ", hip:48774, desc:"近南極星區，中國古代星官未涵蓋此星；為船帆座連線圖形上的一顆星。"},
+                {name:"海山增二", ra:161.6924, dec:-49.4203, type:"star", mag:2.69, color:0xffebda, west:"船帆座 μ", hip:52727, desc:"中國星官「海山」的成員星，同時也是船帆座連線圖形上的一顆星。"},
+                {name:"天記增二", ra:153.684, dec:-42.1219, type:"star", mag:3.85, color:0xdae5ff, west:"船帆座 q", hip:50191, desc:"中國星官「天記」的成員星，同時也是船帆座連線圖形上的一顆星。"},
+                {name:"天記增一", ra:142.675, dec:-40.4668, type:"star", mag:3.6, color:0xf5f5ff, west:"船帆座 ψ", hip:46651, desc:"中國星官「天記」的成員星，同時也是船帆座連線圖形上的一顆星。"},
+                {name:"天記", ra:136.999, dec:-43.4326, type:"star", mag:2.23, color:0xffaa44, west:"Suhail · 船帆座 λ", hip:44816, desc:"星官「天記」。偽十字星群的組成星之一。"},
+                {name:"天社一", ra:122.3831, dec:-47.3366, type:"star", mag:1.75, color:0xcedeff, west:"Regor · 船帆座 γ2", hip:39953, desc:"中國星官「天社」的成員星，同時也是船帆座連線圖形上的一顆星。"},
+                {name:"船帆座超新星殘骸", ra:133.6, dec:-45.2, type:"nebula", color:0x33aaff, desc:"約一萬年前恆星爆炸留下的巨大擴散網狀氣體。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7]]
+            },
+            { id:"fornax", name:"天爐座", nameEn:"Fornax",
+              stars:[
+                {name:"天苑增三", ra:48.0189, dec:-28.9876, type:"star", mag:3.85, color:0xfff4ea, west:"Dalim · 天爐座 α", hip:14879, desc:"星官「天苑」。天爐座聯星系統。"},
+                {name:"天庾三*", ra:42.2726, dec:-32.4059, type:"star", mag:4.45, color:0xffe8d5, west:"天爐座 β", hip:13147, desc:"中國星官「天庾三*」的成員星，同時也是天爐座連線圖形上的一顆星。"},
+                {name:"天庾一*", ra:31.1227, dec:-29.2968, type:"star", mag:4.68, color:0xcdddff, west:"天爐座 ν", hip:9677, desc:"中國星官「天庾一*」的成員星，同時也是天爐座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2]]
+            },
+            { id:"cetus", name:"鯨魚座", nameEn:"Cetus",
+              stars:[
+                {name:"天囷八", ra:40.8252, dec:3.2358, type:"star", mag:3.47, color:0xdce6ff, west:"Kaffaljidhma · 鯨魚座 γ", hip:12706, desc:"中國星官「天囷」的成員星，同時也是鯨魚座連線圖形上的一顆星。"},
+                {name:"天囷七", ra:38.9686, dec:5.5932, type:"star", mag:4.87, color:0xffecdc, west:"鯨魚座 ν", hip:12093, desc:"中國星官「天囷」的成員星，同時也是鯨魚座連線圖形上的一顆星。"},
+                {name:"天囷六", ra:37.0398, dec:8.4601, type:"star", mag:4.3, color:0xd3e1ff, west:"鯨魚座 ξ2", hip:11484, desc:"中國星官「天囷」的成員星，同時也是鯨魚座連線圖形上的一顆星。"},
+                {name:"天囷四", ra:41.2356, dec:10.1141, type:"star", mag:4.27, color:0xeef1ff, west:"鯨魚座 μ", hip:12828, desc:"中國星官「天囷」的成員星，同時也是鯨魚座連線圖形上的一顆星。"},
+                {name:"天囷三", ra:44.9288, dec:8.9074, type:"star", mag:4.71, color:0xd0dfff, west:"Menkar · 鯨魚座 λ", hip:13954, desc:"中國星官「天囷」的成員星，同時也是鯨魚座連線圖形上的一顆星。"},
+                {name:"天囷一", ra:45.5699, dec:4.0897, type:"star", mag:2.54, color:0xffd2ae, west:"Menkar · 鯨魚座 α", hip:14135, desc:"中國星官「天囷」的成員星，同時也是鯨魚座連線圖形上的一顆星。"},
+                {name:"天囷九", ra:39.8707, dec:0.3285, type:"star", mag:4.08, color:0xcadbff, west:"鯨魚座 δ", hip:12387, desc:"中國星官「天囷」的成員星，同時也是鯨魚座連線圖形上的一顆星。"},
+                {name:"芻藁增二", ra:34.8366, dec:-2.9776, type:"star", mag:6.5, color:0xff5522, west:"Mira · 鯨魚座 ο", hip:10826, desc:"星官「芻藁」。著名的「奇異之星」長周期脈動紅巨星變星。"},
+                {name:"天倉四", ra:27.8651, dec:-10.335, type:"star", mag:3.74, color:0xffe2ca, west:"Baten Kaitos · 鯨魚座 ζ", hip:8645, desc:"中國星官「天倉」的成員星，同時也是鯨魚座連線圖形上的一顆星。"},
+                {name:"天倉五", ra:26.017, dec:-15.9375, type:"star", mag:3.49, color:0xfff2e7, west:"鯨魚座 τ", hip:8102, desc:"中國星官「天倉」的成員星，同時也是鯨魚座連線圖形上的一顆星。"},
+                {name:"土司空", ra:10.8974, dec:-17.9866, type:"star", mag:2.04, color:0xffcc55, west:"Diphda · 鯨魚座 β", hip:3419, desc:"星官「土司空」。鯨魚座最亮星。"},
+                {name:"天倉一", ra:4.857, dec:-8.8239, type:"star", mag:3.56, color:0xffdfc6, west:"Deneb Kaitos Shemali · 鯨魚座 ι", hip:1562, desc:"中國星官「天倉」的成員星，同時也是鯨魚座連線圖形上的一顆星。"},
+                {name:"天倉二", ra:17.1475, dec:-10.1823, type:"star", mag:3.46, color:0xffe1c9, west:"Dheneb · 鯨魚座 η", hip:5364, desc:"中國星官「天倉」的成員星，同時也是鯨魚座連線圖形上的一顆星。"},
+                {name:"天倉三", ra:21.0059, dec:-8.1833, type:"star", mag:3.6, color:0xffe4cf, west:"Al Naymat · 鯨魚座 θ", hip:6537, desc:"中國星官「天倉」的成員星，同時也是鯨魚座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11], [11, 12], [12, 13], [13, 8]]
+            },
+            { id:"phoenix", name:"鳳凰座", nameEn:"Phoenix",
+              stars:[
+                {name:"火鳥六", ra:6.571, dec:-42.306, type:"star", mag:2.39, color:0xffaa44, west:"Ankaa · 鳳凰座 α", hip:2081, desc:"星官「火鳥」。鳳凰座主星，光譜雙星。"},
+                {name:"火鳥九", ra:16.521, dec:-46.7184, type:"star", mag:3.32, color:0xffebdb, west:"鳳凰座 β", hip:5165, desc:"中國星官「火鳥」的成員星，同時也是鳳凰座連線圖形上的一顆星。"},
+                {name:"火鳥十", ra:22.0914, dec:-43.3182, type:"star", mag:3.41, color:0xffd5b3, west:"鳳凰座 γ", hip:6867, desc:"中國星官「火鳥」的成員星，同時也是鳳凰座連線圖形上的一顆星。"},
+                {name:"天園一", ra:22.8129, dec:-49.0727, type:"star", mag:3.93, color:0xffe8d5, west:"鳳凰座 δ", hip:7083, desc:"中國星官「天園」的成員星，同時也是鳳凰座連線圖形上的一顆星。"},
+                {name:"水委二", ra:17.0962, dec:-55.2458, type:"star", mag:3.94, color:0xcfdfff, west:"Wurren · 鳳凰座 ζ", hip:5348, desc:"中國星官「水委」的成員星，同時也是鳳凰座連線圖形上的一顆星。"},
+                {name:"火鳥四", ra:2.3527, dec:-45.7474, type:"star", mag:3.88, color:0xffe6d2, west:"鳳凰座 ε", hip:765, desc:"中國星官「火鳥」的成員星，同時也是鳳凰座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 1], [1, 5], [5, 0]]
+            },
+            { id:"hydra", name:"長蛇座", nameEn:"Hydra",
+              stars:[
+                {name:"柳宿五", ra:131.6938, dec:6.4188, type:"star", mag:3.38, color:0xfff4ea, west:"Ashlesha · 長蛇座 ε", hip:43109, desc:"中國星官「柳宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"柳宿四", ra:132.1082, dec:5.8378, type:"star", mag:4.35, color:0xd4e1ff, west:"長蛇座 ρ", hip:43234, desc:"中國星官「柳宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"柳宿三", ra:130.8061, dec:3.3987, type:"star", mag:4.3, color:0xcbdcff, west:"長蛇座 η", hip:42799, desc:"中國星官「柳宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"柳宿二", ra:129.6893, dec:3.3414, type:"star", mag:4.45, color:0xffdfc6, west:"Minchir · 長蛇座 σ", hip:42402, desc:"中國星官「柳宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"柳宿一", ra:129.414, dec:5.7038, type:"star", mag:4.14, color:0xd7e3ff, west:"Minazal · 長蛇座 δ", hip:42313, desc:"中國星官「柳宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"柳宿六", ra:133.8484, dec:5.9456, type:"star", mag:3.11, color:0xffe8d5, west:"長蛇座 ζ", hip:43813, desc:"中國星官「柳宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"柳宿八", ra:138.5911, dec:2.3143, type:"star", mag:3.89, color:0xd3e1ff, west:"長蛇座 θ", hip:45336, desc:"中國星官「柳宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"星宿四", ra:144.964, dec:-1.1428, type:"star", mag:3.9, color:0xffdcc0, west:"Ukdah · 長蛇座 ι", hip:47431, desc:"中國星官「星宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"星宿一", ra:141.8968, dec:-8.6586, type:"star", mag:1.98, color:0xffaa44, west:"Alphard · 長蛇座 α", hip:46390, desc:"星官「星宿」。意為「孤獨者」，長蛇座四周暗空唯一的亮星。"},
+                {name:"張宿一", ra:147.8696, dec:-14.8466, type:"star", mag:4.11, color:0xffead9, west:"Zhang · 長蛇座 υ1", hip:48356, desc:"中國星官「張宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"張宿二", ra:152.647, dec:-12.3541, type:"star", mag:3.61, color:0xffe7d3, west:"長蛇座 λ", hip:49841, desc:"中國星官「張宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"張宿三", ra:156.5226, dec:-16.8363, type:"star", mag:3.83, color:0xffd7b7, west:"長蛇座 μ", hip:51069, desc:"中國星官「張宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"翼宿五", ra:162.4062, dec:-16.1936, type:"star", mag:3.11, color:0xffdfc5, west:"長蛇座 ν", hip:52943, desc:"中國星官「翼宿」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"青丘五", ra:173.2505, dec:-31.8576, type:"star", mag:3.54, color:0xffe9d7, west:"長蛇座 ξ", hip:56343, desc:"中國星官「青丘」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"青丘一", ra:178.2272, dec:-33.9081, type:"star", mag:4.29, color:0xd0dfff, west:"長蛇座 β", hip:57936, desc:"中國星官「青丘」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"平一", ra:199.7304, dec:-23.1715, type:"star", mag:2.99, color:0xffead9, west:"長蛇座 γ", hip:64962, desc:"中國星官「平」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"平二", ra:211.5929, dec:-26.6824, type:"star", mag:3.25, color:0xffe3cd, west:"長蛇座 π", hip:68895, desc:"中國星官「平」的成員星，同時也是長蛇座連線圖形上的一顆星。"},
+                {name:"陣車一", ra:222.5721, dec:-27.9604, type:"star", mag:4.42, color:0xffdabd, west:"長蛇座 E", hip:72571, desc:"中國星官「陣車」的成員星，同時也是長蛇座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 0], [0, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11], [11, 12], [12, 13], [13, 14], [14, 15], [15, 16], [16, 17]]
+            },
+            { id:"crater", name:"巨爵座", nameEn:"Crater",
+              stars:[
+                {name:"翼宿十三", ra:174.1705, dec:-9.8022, type:"star", mag:4.7, color:0xd2e0ff, west:"巨爵座 θ", hip:56633, desc:"中國星官「翼宿」的成員星，同時也是巨爵座連線圖形上的一顆星。"},
+                {name:"翼宿十", ra:171.1525, dec:-10.8593, type:"star", mag:4.81, color:0xffd5b2, west:"巨爵座 ε", hip:55687, desc:"中國星官「翼宿」的成員星，同時也是巨爵座連線圖形上的一顆星。"},
+                {name:"翼宿七", ra:169.8352, dec:-14.7785, type:"star", mag:3.56, color:0xffe3cc, west:"Labr · 巨爵座 δ", hip:55282, desc:"中國星官「翼宿」的成員星，同時也是巨爵座連線圖形上的一顆星。"},
+                {name:"翼宿一", ra:164.9436, dec:-18.2988, type:"star", mag:4.07, color:0xffcc66, west:"α Crateris · 巨爵座 α", hip:53740, desc:"星官「翼宿」。古代代表酒杯的星座。"},
+                {name:"翼宿十六", ra:167.9145, dec:-22.8258, type:"star", mag:4.46, color:0xd8e4ff, west:"Al Sharasif · 巨爵座 β", hip:54682, desc:"中國星官「翼宿」的成員星，同時也是巨爵座連線圖形上的一顆星。"},
+                {name:"翼宿四", ra:170.8412, dec:-18.78, type:"star", mag:5.08, color:0xfffbff, west:"巨爵座 λ", hip:55598, desc:"中國星官「翼宿」的成員星，同時也是巨爵座連線圖形上的一顆星。"},
+                {name:"翼宿二", ra:171.2205, dec:-17.684, type:"star", mag:4.06, color:0xe5ecff, west:"巨爵座 γ", hip:55705, desc:"中國星官「翼宿」的成員星，同時也是巨爵座連線圖形上的一顆星。"},
+                {name:"翼宿三", ra:176.1907, dec:-18.3507, type:"star", mag:4.71, color:0xffe8d6, west:"巨爵座 ζ", hip:57283, desc:"中國星官「翼宿」的成員星，同時也是巨爵座連線圖形上的一顆星。"},
+                {name:"翼宿六", ra:179.004, dec:-17.1508, type:"star", mag:5.17, color:0xd5e2ff, west:"巨爵座 η", hip:58188, desc:"中國星官「翼宿」的成員星，同時也是巨爵座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [2, 6]]
+            },
+            { id:"corvus", name:"烏鴉座", nameEn:"Corvus",
+              stars:[
+                {name:"右轄", ra:182.1034, dec:-24.7289, type:"star", mag:4.02, color:0xf0f2ff, west:"Alchiba · 烏鴉座 α", hip:59199, desc:"中國星官「右轄」的成員星，同時也是烏鴉座連線圖形上的一顆星。"},
+                {name:"軫宿二", ra:182.5312, dec:-22.6198, type:"star", mag:3.02, color:0xffdcbf, west:"Minkar · 烏鴉座 ε", hip:59316, desc:"中國星官「軫宿」的成員星，同時也是烏鴉座連線圖形上的一顆星。"},
+                {name:"軫宿一", ra:183.9515, dec:-17.5419, type:"star", mag:2.59, color:0xd0e0ff, west:"Gienah · 烏鴉座 γ", hip:59803, desc:"星官「軫宿」。烏鴉座最亮星。"},
+                {name:"軫宿三", ra:187.4661, dec:-16.5154, type:"star", mag:2.94, color:0xd6e2ff, west:"Algorab · 烏鴉座 δ", hip:60965, desc:"中國星官「軫宿」的成員星，同時也是烏鴉座連線圖形上的一顆星。"},
+                {name:"軫宿四", ra:188.5968, dec:-23.3968, type:"star", mag:2.65, color:0xffebdb, west:"Kraz · 烏鴉座 β", hip:61359, desc:"中國星官「軫宿」的成員星，同時也是烏鴉座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 1]]
+            },
+            { id:"lupus", name:"豺狼座", nameEn:"Lupus",
+              stars:[
+                {name:"從官二", ra:237.7397, dec:-33.6272, type:"star", mag:3.97, color:0xd4e1ff, west:"豺狼座 χ", hip:77634, desc:"中國星官「從官（房宿）」的成員星，同時也是豺狼座連線圖形上的一顆星。"},
+                {name:"從官增一", ra:234.9416, dec:-34.4119, type:"star", mag:4.66, color:0xffe8d6, west:"豺狼座 ψ1", hip:76705, desc:"中國星官「從官（房宿）」的成員星，同時也是豺狼座連線圖形上的一顆星。"},
+                {name:"頓頑一", ra:230.4515, dec:-36.2614, type:"star", mag:3.57, color:0xffd5b3, west:"豺狼座 φ1", hip:75177, desc:"中國星官「頓頑」的成員星，同時也是豺狼座連線圖形上的一顆星。"},
+                {name:"騎官二", ra:230.343, dec:-40.6475, type:"star", mag:3.22, color:0xc9dbff, west:"豺狼座 δ", hip:75141, desc:"中國星官「騎官」的成員星，同時也是豺狼座連線圖形上的一顆星。"},
+                {name:"騎官四", ra:224.633, dec:-43.134, type:"star", mag:2.68, color:0xccdcff, west:"KeKouan · 豺狼座 β", hip:73273, desc:"中國星官「騎官」的成員星，同時也是豺狼座連線圖形上的一顆星。"},
+                {name:"騎官十", ra:220.4823, dec:-47.3882, type:"star", mag:2.3, color:0xd0e0ff, west:"Men · 豺狼座 α", hip:71860, desc:"星官「騎官」。藍白巨星，仙王座β型變星。"},
+                {name:"車騎一", ra:228.0712, dec:-52.0992, type:"star", mag:3.41, color:0xffead9, west:"豺狼座 ζ", hip:74395, desc:"中國星官「車騎」的成員星，同時也是豺狼座連線圖形上的一顆星。"},
+                {name:"騎官七", ra:229.6334, dec:-47.8753, type:"star", mag:4.27, color:0xd1e0ff, west:"豺狼座 μ", hip:74911, desc:"中國星官「騎官」的成員星，同時也是豺狼座連線圖形上的一顆星。"},
+                {name:"騎官六", ra:230.6703, dec:-44.6896, type:"star", mag:3.37, color:0xcbdcff, west:"豺狼座 ε", hip:75264, desc:"中國星官「騎官」的成員星，同時也是豺狼座連線圖形上的一顆星。"},
+                {name:"騎官一", ra:233.7852, dec:-41.1668, type:"star", mag:2.8, color:0xcadbff, west:"豺狼座 γ", hip:76297, desc:"中國星官「騎官」的成員星，同時也是豺狼座連線圖形上的一顆星。"},
+                {name:"積卒二", ra:240.0305, dec:-38.3967, type:"star", mag:3.42, color:0xcadbff, west:"豺狼座 η", hip:78384, desc:"中國星官「積卒」的成員星，同時也是豺狼座連線圖形上的一顆星。"},
+                {name:"積卒一", ra:241.6481, dec:-36.8023, type:"star", mag:4.22, color:0xccdcff, west:"豺狼座 θ", hip:78918, desc:"中國星官「積卒」的成員星，同時也是豺狼座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11], [3, 9]]
+            },
+            { id:"corona_australis", name:"南冕座", nameEn:"Corona Australis",
+              stars:[
+                {name:"鱉八", ra:284.6807, dec:-37.1074, type:"star", mag:4.83, color:0xf8f7ff, west:"南冕座 ε", hip:93174, desc:"中國星官「鱉」的成員星，同時也是南冕座連線圖形上的一顆星。"},
+                {name:"鱉七", ra:286.6046, dec:-37.0634, type:"star", mag:4.23, color:0xfffcf7, west:"南冕座 γ", hip:93825, desc:"中國星官「鱉」的成員星，同時也是南冕座連線圖形上的一顆星。"},
+                {name:"鱉六", ra:287.3681, dec:-37.9045, type:"star", mag:4.1, color:0xffffff, west:"α Coronalis · 南冕座 α", hip:94114, desc:"星官「鱉」。南天半環狀星冠主星。"},
+                {name:"鱉五", ra:287.5073, dec:-39.3408, type:"star", mag:4.1, color:0xffe1c9, west:"南冕座 β", hip:94160, desc:"中國星官「鱉」的成員星，同時也是南冕座連線圖形上的一顆星。"},
+                {name:"鱉四", ra:287.0874, dec:-40.4967, type:"star", mag:4.57, color:0xffe4cf, west:"南冕座 δ", hip:94005, desc:"中國星官「鱉」的成員星，同時也是南冕座連線圖形上的一顆星。"},
+                {name:"鱉三", ra:285.7787, dec:-42.0951, type:"star", mag:4.74, color:0xd5e2ff, west:"南冕座 ζ", hip:93542, desc:"中國星官「鱉」的成員星，同時也是南冕座連線圖形上的一顆星。"},
+                {name:"南冕座 η2", ra:282.3958, dec:-43.4341, type:"star", mag:5.6, color:0xd2e0ff, west:"南冕座 η2", hip:92382, desc:"近南極星區，中國古代星官未涵蓋此星；為南冕座連線圖形上的一顆星。"},
+                {name:"鱉十一", ra:278.3758, dec:-42.3125, type:"star", mag:4.62, color:0xffe7d4, west:"南冕座 θ", hip:90982, desc:"中國星官「鱉」的成員星，同時也是南冕座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7]]
+            },
+            { id:"ara", name:"祭壇座", nameEn:"Ara",
+              stars:[
+                {name:"龜二", ra:261.3486, dec:-56.3777, type:"star", mag:3.31, color:0xceddff, west:"祭壇座 γ", hip:85267, desc:"中國星官「龜」的成員星，同時也是祭壇座連線圖形上的一顆星。"},
+                {name:"龜三", ra:262.7746, dec:-60.6838, type:"star", mag:3.6, color:0xd0dfff, west:"祭壇座 δ", hip:85727, desc:"中國星官「龜」的成員星，同時也是祭壇座連線圖形上的一顆星。"},
+                {name:"龜四", ra:252.4465, dec:-59.0414, type:"star", mag:3.77, color:0xffd4b1, west:"祭壇座 η", hip:82363, desc:"中國星官「龜」的成員星，同時也是祭壇座連線圖形上的一顆星。"},
+                {name:"龜五", ra:254.655, dec:-55.9901, type:"star", mag:3.12, color:0xffd5b2, west:"祭壇座 ζ", hip:83081, desc:"中國星官「龜」的成員星，同時也是祭壇座連線圖形上的一顆星。"},
+                {name:"龜一", ra:254.896, dec:-53.1604, type:"star", mag:4.06, color:0xffd8b8, west:"祭壇座 ε1", hip:83153, desc:"中國星官「龜」的成員星，同時也是祭壇座連線圖形上的一顆星。"},
+                {name:"杵二", ra:262.9604, dec:-49.8761, type:"star", mag:2.84, color:0xcedeff, west:"Choo · 祭壇座 α", hip:85792, desc:"中國星官「杵（箕宿）」的成員星，同時也是祭壇座連線圖形上的一顆星。"},
+                {name:"杵三", ra:261.325, dec:-55.5299, type:"star", mag:2.84, color:0xffcc55, west:"祭壇座 β", hip:85258, desc:"星官「杵（箕宿）」。銀河系背景中的南天祭壇主星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]]
+            },
+            { id:"scutum", name:"盾牌座", nameEn:"Scutum",
+              stars:[
+                {name:"天弁一", ra:278.8018, dec:-8.2441, type:"star", mag:3.85, color:0xffdcbf, west:"盾牌座 α", hip:91117, desc:"中國星官「天弁」的成員星，同時也是盾牌座連線圖形上的一顆星。"},
+                {name:"天弁四", ra:281.7936, dec:-4.7479, type:"star", mag:4.22, color:0xffe4ce, west:"盾牌座 β", hip:92175, desc:"中國星官「天弁」的成員星，同時也是盾牌座連線圖形上的一顆星。"},
+                {name:"天弁二", ra:280.5684, dec:-9.0525, type:"star", mag:4.7, color:0xf3f4ff, west:"盾牌座 δ", hip:91726, desc:"中國星官「天弁」的成員星，同時也是盾牌座連線圖形上的一顆星。"},
+                {name:"盾牌座 γ", ra:277.2994, dec:-14.5658, type:"star", mag:4.67, color:0xdbe6ff, west:"盾牌座 γ", hip:90595, desc:"近南極星區，中國古代星官未涵蓋此星；為盾牌座連線圖形上的一顆星。"},
+                {name:"野鴨星團 (M11)", ra:282.7, dec:-6.2, type:"cluster", color:0xffffaa, desc:"天空中最緊密、最豐富多彩的疏散星團之一。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 0]]
+            },
+            { id:"octans", name:"南極座", nameEn:"Octans",
+              stars:[
+                {name:"異雀五", ra:216.7301, dec:-83.6679, type:"star", mag:4.31, color:0xffdcc0, west:"南極座 δ", hip:70638, desc:"中國星官「異雀」的成員星，同時也是南極座連線圖形上的一顆星。"},
+                {name:"南極座 β", ra:341.5146, dec:-81.3816, type:"star", mag:4.13, color:0xe5ebff, west:"南極座 β", hip:112405, desc:"近南極星區，中國古代星官未涵蓋此星；為南極座連線圖形上的一顆星。"},
+                {name:"蛇尾三", ra:325.3694, dec:-77.39, type:"star", mag:3.73, color:0xffe7d3, west:"南極座 ν", hip:107089, desc:"中國星官「蛇尾」的成員星，同時也是南極座連線圖形上的一顆星。"},
+                {name:"南極座 σ", ra:317.4, dec:-88.9, type:"star", mag:5.45, color:0xffffcc, west:"Sigma Octantis · 南極座 σ", hip:104382, desc:"地理南極點正上方的恆星。因十分暗淡，航海多改用南十字座定位。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 0]]
+            },
+            { id:"hydrus", name:"水蛇座", nameEn:"Hydrus",
+              stars:[
+                {name:"蛇尾一", ra:6.4378, dec:-77.2542, type:"star", mag:2.8, color:0xfff4ea, west:"水蛇座 β", hip:2021, desc:"星官「蛇尾」。靠近小麥哲倫雲。"},
+                {name:"附白一", ra:56.8098, dec:-74.239, type:"star", mag:3.26, color:0xffd4b0, west:"水蛇座 γ", hip:17678, desc:"中國星官「附白」的成員星，同時也是水蛇座連線圖形上的一顆星。"},
+                {name:"蛇腹二", ra:39.8973, dec:-68.2669, type:"star", mag:4.12, color:0xd3e1ff, west:"水蛇座 ε", hip:12394, desc:"中國星官「蛇腹」的成員星，同時也是水蛇座連線圖形上的一顆星。"},
+                {name:"蛇腹三", ra:35.4373, dec:-68.6594, type:"star", mag:4.08, color:0xd8e4ff, west:"水蛇座 δ", hip:11001, desc:"中國星官「蛇腹」的成員星，同時也是水蛇座連線圖形上的一顆星。"},
+                {name:"蛇腹四", ra:28.7339, dec:-67.6473, type:"star", mag:4.68, color:0xffe9d8, west:"水蛇座 η2", hip:8928, desc:"中國星官「蛇腹」的成員星，同時也是水蛇座連線圖形上的一顆星。"},
+                {name:"蛇首一", ra:29.6925, dec:-61.5699, type:"star", mag:2.86, color:0xecf0ff, west:"水蛇座 α", hip:9236, desc:"中國星官「蛇首」的成員星，同時也是水蛇座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5]]
+            },
+            { id:"dorado", name:"劍魚座", nameEn:"Dorado",
+              stars:[
+                {name:"金魚一", ra:64.0066, dec:-51.4866, type:"star", mag:4.26, color:0xeef1ff, west:"劍魚座 γ", hip:19893, desc:"中國星官「金魚」的成員星，同時也是劍魚座連線圖形上的一顆星。"},
+                {name:"金魚二", ra:68.4991, dec:-55.045, type:"star", mag:3.3, color:0xd2e0ff, west:"劍魚座 α", hip:21281, desc:"中國星官「金魚」的成員星，同時也是劍魚座連線圖形上的一顆星。"},
+                {name:"金魚三", ra:83.4063, dec:-62.4898, type:"star", mag:3.76, color:0xfff6ed, west:"劍魚座 β", hip:26069, desc:"中國星官「金魚」的成員星，同時也是劍魚座連線圖形上的一顆星。"},
+                {name:"金魚四", ra:86.1932, dec:-65.7355, type:"star", mag:4.34, color:0xe5ecff, west:"劍魚座 δ", hip:27100, desc:"中國星官「金魚」的成員星，同時也是劍魚座連線圖形上的一顆星。"},
+                {name:"劍魚座 36", ra:88.5252, dec:-63.0896, type:"star", mag:4.65, color:0xffe6d2, west:"劍魚座 36", hip:27890, desc:"近南極星區，中國古代星官未涵蓋此星；為劍魚座連線圖形上的一顆星。"},
+                {name:"劍魚座 ζ", ra:76.3777, dec:-57.4727, type:"star", mag:4.71, color:0xfffcf7, west:"劍魚座 ζ", hip:23693, desc:"近南極星區，中國古代星官未涵蓋此星；為劍魚座連線圖形上的一顆星。"},
+                {name:"大麥哲倫雲 (LMC)", ra:80.8, dec:-69.7, type:"nebula", color:0xffffff, desc:"銀河系的衛星矮星系，南天極著名的肉眼可見大星系。"},
+                {name:"蜘蛛星雲 (NGC 2070)", ra:84.7, dec:-69.1, type:"nebula", color:0xff5588, desc:"大麥哲倫雲內極度巨大的恆星暴生區。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 2], [2, 5], [5, 1]]
+            },
+            { id:"volans", name:"飛魚座", nameEn:"Volans",
+              stars:[
+                {name:"飛魚一", ra:135.6116, dec:-66.3961, type:"star", mag:4, color:0xe0e9ff, west:"飛魚座 α", hip:44382, desc:"中國星官「飛魚」的成員星，同時也是飛魚座連線圖形上的一顆星。"},
+                {name:"飛魚三", ra:126.4341, dec:-66.1369, type:"star", mag:3.77, color:0xffe2cb, west:"飛魚座 β", hip:41312, desc:"中國星官「飛魚」的成員星，同時也是飛魚座連線圖形上的一顆星。"},
+                {name:"飛魚座 ε", ra:121.9825, dec:-68.6171, type:"star", mag:4.35, color:0xd0dfff, west:"飛魚座 ε", hip:39794, desc:"近南極星區，中國古代星官未涵蓋此星；為飛魚座連線圖形上的一顆星。"},
+                {name:"飛魚五", ra:109.2076, dec:-67.9572, type:"star", mag:3.97, color:0xfff1e4, west:"飛魚座 δ", hip:35228, desc:"中國星官「飛魚」的成員星，同時也是飛魚座連線圖形上的一顆星。"},
+                {name:"飛魚二", ra:107.1869, dec:-70.4989, type:"star", mag:3.78, color:0xffcc44, west:"飛魚座 γ2", hip:34481, desc:"星官「飛魚」。美麗的聯星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 2], [2, 0]]
+            },
+            { id:"chamaeleon", name:"蝘蜓座", nameEn:"Chamaeleon",
+              stars:[
+                {name:"小鬥增一", ra:124.6315, dec:-76.9197, type:"star", mag:4.05, color:0xffffff, west:"蝘蜓座 α", hip:40702, desc:"星官「小鬥」。南天深處小暗星。"},
+                {name:"小鬥三", ra:158.8671, dec:-78.6078, type:"star", mag:4.11, color:0xffd4b0, west:"蝘蜓座 γ", hip:51839, desc:"中國星官「小鬥」的成員星，同時也是蝘蜓座連線圖形上的一顆星。"},
+                {name:"小鬥四", ra:161.318, dec:-80.4696, type:"star", mag:4.45, color:0xcbdcff, west:"蝘蜓座 δ2", hip:52633, desc:"中國星官「小鬥」的成員星，同時也是蝘蜓座連線圖形上的一顆星。"},
+                {name:"小鬥一", ra:184.5868, dec:-79.3122, type:"star", mag:4.24, color:0xcfdeff, west:"蝘蜓座 β", hip:60000, desc:"中國星官「小鬥」的成員星，同時也是蝘蜓座連線圖形上的一顆星。"},
+                {name:"小鬥二", ra:179.9066, dec:-78.2218, type:"star", mag:4.88, color:0xd3e1ff, west:"蝘蜓座 ε", hip:58484, desc:"中國星官「小鬥」的成員星，同時也是蝘蜓座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 1]]
+            },
+            { id:"musca", name:"蒼蠅座", nameEn:"Musca",
+              stars:[
+                {name:"海山六", ra:176.4017, dec:-66.7288, type:"star", mag:3.63, color:0xe1e9ff, west:"蒼蠅座 λ", hip:57363, desc:"中國星官「海山」的成員星，同時也是蒼蠅座連線圖形上的一顆星。"},
+                {name:"蒼蠅座 ε", ra:184.3928, dec:-67.9607, type:"star", mag:4.06, color:0xffd3af, west:"蒼蠅座 ε", hip:59929, desc:"近南極星區，中國古代星官未涵蓋此星；為蒼蠅座連線圖形上的一顆星。"},
+                {name:"蜜蜂三", ra:189.2959, dec:-69.1356, type:"star", mag:2.69, color:0xd0e0ff, west:"蒼蠅座 α", hip:61585, desc:"星官「蜜蜂」。緊鄰南十字座。"},
+                {name:"蜜蜂一", ra:191.57, dec:-68.1081, type:"star", mag:3.04, color:0xccdcff, west:"蒼蠅座 β", hip:62322, desc:"中國星官「蜜蜂」的成員星，同時也是蒼蠅座連線圖形上的一顆星。"},
+                {name:"蜜蜂四*", ra:195.5678, dec:-71.5489, type:"star", mag:3.61, color:0xffe0c7, west:"蒼蠅座 δ", hip:63613, desc:"中國星官「蜜蜂四*」的成員星，同時也是蒼蠅座連線圖形上的一顆星。"},
+                {name:"蜜蜂二*", ra:188.1167, dec:-72.133, type:"star", mag:3.84, color:0xcdddff, west:"蒼蠅座 γ", hip:61199, desc:"中國星官「蜜蜂二*」的成員星，同時也是蒼蠅座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 2]]
+            },
+            { id:"apus", name:"天燕座", nameEn:"Apus",
+              stars:[
+                {name:"異雀八", ra:221.9655, dec:-79.0448, type:"star", mag:3.83, color:0xffaa44, west:"天燕座 α", hip:72370, desc:"星官「異雀」。代表極樂鳥的南天深處星座。"},
+                {name:"異雀六", ra:245.0867, dec:-78.6957, type:"star", mag:4.68, color:0xffd1ab, west:"天燕座 δ1", hip:80047, desc:"中國星官「異雀」的成員星，同時也是天燕座連線圖形上的一顆星。"},
+                {name:"異雀三", ra:250.7694, dec:-77.5174, type:"star", mag:4.23, color:0xffe5cf, west:"天燕座 β", hip:81852, desc:"中國星官「異雀」的成員星，同時也是天燕座連線圖形上的一顆星。"},
+                {name:"異雀四", ra:248.3628, dec:-78.8971, type:"star", mag:3.86, color:0xffead9, west:"天燕座 γ", hip:81065, desc:"中國星官「異雀」的成員星，同時也是天燕座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3]]
+            },
+            { id:"norma", name:"矩尺座", nameEn:"Norma",
+              stars:[
+                {name:"矩尺座 δ", ra:241.6227, dec:-45.1732, type:"star", mag:4.73, color:0xe6edff, west:"矩尺座 δ", hip:78914, desc:"近南極星區，中國古代星官未涵蓋此星；為矩尺座連線圖形上的一顆星。"},
+                {name:"矩尺座 ε", ra:246.796, dec:-47.5548, type:"star", mag:4.46, color:0xd2e0ff, west:"矩尺座 ε", hip:80582, desc:"近南極星區，中國古代星官未涵蓋此星；為矩尺座連線圖形上的一顆星。"},
+                {name:"矩尺座 γ2", ra:244.9601, dec:-50.1555, type:"star", mag:4.01, color:0xffaa44, west:"矩尺座 γ2", hip:80000, desc:"位於銀河核心帶中的暗星。"},
+                {name:"矩尺座 η", ra:240.8037, dec:-49.2297, type:"star", mag:4.65, color:0xffebda, west:"矩尺座 η", hip:78639, desc:"近南極星區，中國古代星官未涵蓋此星；為矩尺座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 0]]
+            },
+            { id:"circinus", name:"圓規座", nameEn:"Circinus",
+              stars:[
+                {name:"圓規座 β", ra:229.3785, dec:-58.8012, type:"star", mag:4.07, color:0xdce6ff, west:"圓規座 β", hip:74824, desc:"近南極星區，中國古代星官未涵蓋此星；為圓規座連線圖形上的一顆星。"},
+                {name:"南門增二", ra:220.6267, dec:-64.9751, type:"star", mag:3.19, color:0xffffff, west:"圓規座 α", hip:71908, desc:"星官「南門」。劍魚座旁的雙星。"},
+                {name:"圓規座 γ", ra:230.8444, dec:-59.3208, type:"star", mag:4.48, color:0xe2eaff, west:"圓規座 γ", hip:75323, desc:"近南極星區，中國古代星官未涵蓋此星；為圓規座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2]]
+            },
+            { id:"telescopium", name:"望遠鏡座", nameEn:"Telescopium",
+              stars:[
+                {name:"望遠鏡座 ε", ra:272.8073, dec:-45.9544, type:"star", mag:4.52, color:0xffe6d3, west:"望遠鏡座 ε", hip:89112, desc:"近南極星區，中國古代星官未涵蓋此星；為望遠鏡座連線圖形上的一顆星。"},
+                {name:"鱉一", ra:276.7434, dec:-45.9685, type:"star", mag:3.49, color:0xd0e0ff, west:"望遠鏡座 α", hip:90422, desc:"星官「鱉」。近代科學探索命名星座。"},
+                {name:"望遠鏡座 ζ", ra:277.2077, dec:-49.0706, type:"star", mag:4.1, color:0xffe7d4, west:"望遠鏡座 ζ", hip:90568, desc:"近南極星區，中國古代星官未涵蓋此星；為望遠鏡座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2]]
+            },
+            { id:"microscopium", name:"顯微鏡座", nameEn:"Microscopium",
+              stars:[
+                {name:"顯微鏡座 α", ra:312.492, dec:-33.7797, type:"star", mag:4.88, color:0xffaa55, west:"顯微鏡座 α", hip:102831, desc:"極暗淡的近代命名星座。"},
+                {name:"顯微鏡座 ι", ra:312.1214, dec:-43.9885, type:"star", mag:5.11, color:0xf4f4ff, west:"顯微鏡座 ι", hip:102693, desc:"近南極星區，中國古代星官未涵蓋此星；為顯微鏡座連線圖形上的一顆星。"},
+                {name:"顯微鏡座 θ1", ra:320.1902, dec:-40.8095, type:"star", mag:4.8, color:0xd8e4ff, west:"顯微鏡座 θ1", hip:105382, desc:"近南極星區，中國古代星官未涵蓋此星；為顯微鏡座連線圖形上的一顆星。"},
+                {name:"離瑜二", ra:319.4845, dec:-32.1725, type:"star", mag:4.71, color:0xdbe6ff, west:"顯微鏡座 ε", hip:105140, desc:"中國星官「離瑜」的成員星，同時也是顯微鏡座連線圖形上的一顆星。"},
+                {name:"離瑜增一", ra:315.3228, dec:-32.2578, type:"star", mag:4.67, color:0xffebdb, west:"顯微鏡座 γ", hip:103738, desc:"中國星官「離瑜」的成員星，同時也是顯微鏡座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 0]]
+            },
+            { id:"caelum", name:"雕具座", nameEn:"Caelum",
+              stars:[
+                {name:"雕具座 δ", ra:67.7087, dec:-44.9537, type:"star", mag:5.07, color:0xcbdcff, west:"雕具座 δ", hip:21060, desc:"近南極星區，中國古代星官未涵蓋此星；為雕具座連線圖形上的一顆星。"},
+                {name:"雕具座 α", ra:70.1405, dec:-41.8638, type:"star", mag:4.44, color:0xffffff, west:"雕具座 α", hip:21770, desc:"南天雕刻鑿刀座。"},
+                {name:"雕具座 β", ra:70.5145, dec:-37.1443, type:"star", mag:5.04, color:0xf8f6ff, west:"雕具座 β", hip:21861, desc:"近南極星區，中國古代星官未涵蓋此星；為雕具座連線圖形上的一顆星。"},
+                {name:"雕具座 γ", ra:76.1017, dec:-35.483, type:"star", mag:4.55, color:0xffe0c8, west:"雕具座 γ", hip:23595, desc:"近南極星區，中國古代星官未涵蓋此星；為雕具座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3]]
+            },
+            { id:"horologium", name:"時鐘座", nameEn:"Horologium",
+              stars:[
+                {name:"天園增六", ra:63.5005, dec:-42.2944, type:"star", mag:3.85, color:0xffaa44, west:"時鐘座 α", hip:19747, desc:"星官「天園」。紅巨星。"},
+                {name:"時鐘座 ι", ra:40.6394, dec:-50.8003, type:"star", mag:5.4, color:0xfffaf4, west:"時鐘座 ι", hip:12653, desc:"近南極星區，中國古代星官未涵蓋此星；為時鐘座連線圖形上的一顆星。"},
+                {name:"時鐘座 η", ra:39.3515, dec:-52.5431, type:"star", mag:5.3, color:0xecf0ff, west:"時鐘座 η", hip:12225, desc:"近南極星區，中國古代星官未涵蓋此星；為時鐘座連線圖形上的一顆星。"},
+                {name:"時鐘座 ζ", ra:40.1651, dec:-54.5499, type:"star", mag:5.21, color:0xfbf8ff, west:"時鐘座 ζ", hip:12484, desc:"近南極星區，中國古代星官未涵蓋此星；為時鐘座連線圖形上的一顆星。"},
+                {name:"時鐘座 μ", ra:45.9034, dec:-59.7378, type:"star", mag:5.12, color:0xf2f3ff, west:"時鐘座 μ", hip:14240, desc:"近南極星區，中國古代星官未涵蓋此星；為時鐘座連線圖形上的一顆星。"},
+                {name:"時鐘座 β", ra:44.6992, dec:-64.0713, type:"star", mag:4.98, color:0xdfe8ff, west:"時鐘座 β", hip:13884, desc:"近南極星區，中國古代星官未涵蓋此星；為時鐘座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5]]
+            },
+            { id:"pictor", name:"繪架座", nameEn:"Pictor",
+              stars:[
+                {name:"金魚增一", ra:102.0477, dec:-61.9414, type:"star", mag:3.24, color:0xffffff, west:"繪架座 α", hip:32607, desc:"星官「金魚」。靠近老人星。"},
+                {name:"繪架座 γ", ra:87.4569, dec:-56.1667, type:"star", mag:4.5, color:0xffe4ce, west:"繪架座 γ", hip:27530, desc:"近南極星區，中國古代星官未涵蓋此星；為繪架座連線圖形上的一顆星。"},
+                {name:"老人增四", ra:86.8212, dec:-51.0665, type:"star", mag:3.85, color:0xe2eaff, west:"繪架座 β", hip:27321, desc:"中國星官「老人」的成員星，同時也是繪架座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2]]
+            },
+            { id:"reticulum", name:"網罟座", nameEn:"Reticulum",
+              stars:[
+                {name:"夾白二", ra:63.6062, dec:-62.4739, type:"star", mag:3.33, color:0xffcc44, west:"網罟座 α", hip:19780, desc:"星官「夾白」。代表望遠鏡十字絲。"},
+                {name:"網罟座 ε", ra:64.121, dec:-59.3022, type:"star", mag:4.44, color:0xffe4ce, west:"網罟座 ε", hip:19921, desc:"近南極星區，中國古代星官未涵蓋此星；為網罟座連線圖形上的一顆星。"},
+                {name:"網罟座 δ", ra:59.6865, dec:-61.4002, type:"star", mag:4.56, color:0xffd4b0, west:"網罟座 δ", hip:18597, desc:"近南極星區，中國古代星官未涵蓋此星；為網罟座連線圖形上的一顆星。"},
+                {name:"蛇首二", ra:56.0499, dec:-64.8069, type:"star", mag:3.84, color:0xffe2cb, west:"網罟座 β", hip:17440, desc:"中國星官「蛇首」的成員星，同時也是網罟座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 0]]
+            },
+            { id:"indus", name:"印第安座", nameEn:"Indus",
+              stars:[
+                {name:"波斯二", ra:309.3918, dec:-47.2915, type:"star", mag:3.11, color:0xffaa44, west:"Persian · 印第安座 α", hip:101772, desc:"星官「波斯」。南天亮星。"},
+                {name:"波斯九?", ra:311.0097, dec:-51.921, type:"star", mag:4.51, color:0xebefff, west:"印第安座 η", hip:102333, desc:"中國星官「波斯九?」的成員星，同時也是印第安座連線圖形上的一顆星。"},
+                {name:"孔雀增四", ra:313.7025, dec:-58.4542, type:"star", mag:3.67, color:0xffdec3, west:"印第安座 β", hip:103227, desc:"中國星官「孔雀」的成員星，同時也是印第安座連線圖形上的一顆星。"},
+                {name:"波斯六?", ra:329.4795, dec:-54.9926, type:"star", mag:4.4, color:0xecf0ff, west:"印第安座 δ", hip:108431, desc:"中國星官「波斯六?」的成員星，同時也是印第安座連線圖形上的一顆星。"},
+                {name:"印第安座 θ", ra:319.9666, dec:-53.4494, type:"star", mag:4.39, color:0xe3ebff, west:"印第安座 θ", hip:105319, desc:"近南極星區，中國古代星官未涵蓋此星；為印第安座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 0]]
+            },
+            { id:"tucana", name:"杜鵑座", nameEn:"Tucana",
+              stars:[
+                {name:"鳥喙一", ra:334.6254, dec:-60.2596, type:"star", mag:2.87, color:0xffd9bb, west:"杜鵑座 α", hip:110130, desc:"中國星官「鳥喙」的成員星，同時也是杜鵑座連線圖形上的一顆星。"},
+                {name:"鶴五", ra:349.3574, dec:-58.2357, type:"star", mag:3.99, color:0xfaf8ff, west:"杜鵑座 γ", hip:114996, desc:"中國星官「鶴」的成員星，同時也是杜鵑座連線圖形上的一顆星。"},
+                {name:"鳥喙四", ra:7.8861, dec:-62.9582, type:"star", mag:4.36, color:0xd3e1ff, west:"杜鵑座 β1", hip:2484, desc:"中國星官「鳥喙」的成員星，同時也是杜鵑座連線圖形上的一顆星。"},
+                {name:"鳥喙六", ra:5.0178, dec:-64.8748, type:"star", mag:4.23, color:0xfff9f3, west:"杜鵑座 ζ", hip:1599, desc:"中國星官「鳥喙」的成員星，同時也是杜鵑座連線圖形上的一顆星。"},
+                {name:"鳥喙七", ra:359.9791, dec:-65.5771, type:"star", mag:4.49, color:0xd2e0ff, west:"杜鵑座 ε", hip:118322, desc:"中國星官「鳥喙」的成員星，同時也是杜鵑座連線圖形上的一顆星。"},
+                {name:"鳥喙二", ra:336.8332, dec:-64.9664, type:"star", mag:4.51, color:0xd5e2ff, west:"杜鵑座 δ", hip:110838, desc:"中國星官「鳥喙」的成員星，同時也是杜鵑座連線圖形上的一顆星。"},
+                {name:"小麥哲倫雲 (SMC)", ra:15.0, dec:-72.8, type:"nebula", color:0xddddff, desc:"銀河系的另一個不規則衛星矮星系。"},
+                {name:"杜鵑座 47 (NGC 104)", ra:6.0, dec:-72.1, type:"cluster", color:0xffffff, desc:"全天第二大、極為密集的壯觀球狀星團。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]
+            },
+            { id:"mensa", name:"山案座", nameEn:"Mensa",
+              stars:[
+                {name:"山案座 α", ra:92.5603, dec:-74.753, type:"star", mag:5.08, color:0xffffff, west:"山案座 α", hip:29271, desc:"全天 88 星座中唯一沒有任何 4 等以上亮星、最暗淡的星座。"},
+                {name:"山案座 γ", ra:82.9709, dec:-76.341, type:"star", mag:5.18, color:0xffe2cb, west:"山案座 γ", hip:25918, desc:"近南極星區，中國古代星官未涵蓋此星；為山案座連線圖形上的一顆星。"},
+                {name:"山案座 η", ra:73.7967, dec:-74.9369, type:"star", mag:5.47, color:0xffd6b4, west:"山案座 η", hip:22871, desc:"近南極星區，中國古代星官未涵蓋此星；為山案座連線圖形上的一顆星。"},
+                {name:"山案座 β", ra:75.6792, dec:-71.3143, type:"star", mag:5.3, color:0xffe7d4, west:"山案座 β", hip:23467, desc:"近南極星區，中國古代星官未涵蓋此星；為山案座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3]]
+            },
+            { id:"sculptor", name:"玉夫座", nameEn:"Sculptor",
+              stars:[
+                {name:"玉夫座 α", ra:14.6515, dec:-29.3574, type:"star", mag:4.3, color:0xcdddff, west:"玉夫座 α", hip:4577, desc:"近南極星區，中國古代星官未涵蓋此星；為玉夫座連線圖形上的一顆星。"},
+                {name:"玉夫座 δ", ra:357.2314, dec:-28.1303, type:"star", mag:4.59, color:0xd6e3ff, west:"玉夫座 δ", hip:117452, desc:"近南極星區，中國古代星官未涵蓋此星；為玉夫座連線圖形上的一顆星。"},
+                {name:"玉夫座 γ", ra:349.706, dec:-32.532, type:"star", mag:4.41, color:0xffe3cc, west:"玉夫座 γ", hip:115102, desc:"近南極星區，中國古代星官未涵蓋此星；為玉夫座連線圖形上的一顆星。"},
+                {name:"火鳥一", ra:353.2427, dec:-37.8183, type:"star", mag:4.38, color:0xd1dfff, west:"玉夫座 β", hip:116231, desc:"中國星官「火鳥」的成員星，同時也是玉夫座連線圖形上的一顆星。"},
+                {name:"玉夫座星系 (NGC 253)", ra:11.9, dec:-25.3, type:"nebula", color:0xffffff, desc:"玉夫座內的銀元星系，星暴現象極其劇烈。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3]]
+            },
+            { id:"pyxis", name:"羅盤座", nameEn:"Pyxis",
+              stars:[
+                {name:"弧矢增廿二", ra:120.896, dec:-40.0031, type:"star", mag:2.21, color:0xc7d9ff, west:"Naos · 羅盤座 ζ", hip:39429, desc:"中國星官「弧矢增廿」的成員星，同時也是羅盤座連線圖形上的一顆星。"},
+                {name:"天狗四", ra:130.0256, dec:-35.3084, type:"star", mag:3.97, color:0xffe9d8, west:"羅盤座 β", hip:42515, desc:"中國星官「天狗」的成員星，同時也是羅盤座連線圖形上的一顆星。"},
+                {name:"天狗五", ra:130.8981, dec:-33.1864, type:"star", mag:3.68, color:0xccdcff, west:"羅盤座 α", hip:42828, desc:"中國星官「天狗」的成員星，同時也是羅盤座連線圖形上的一顆星。"},
+                {name:"天狗六", ra:132.633, dec:-27.7098, type:"star", mag:4.02, color:0xffddc2, west:"羅盤座 γ", hip:43409, desc:"中國星官「天狗」的成員星，同時也是羅盤座連線圖形上的一顆星。"},
+                {name:"羅盤座α", ra:134.1, dec:-33.2, type:"star", mag:3.68, color:0xd0e0ff, west:"羅盤座α", desc:"古南船座拆分出的航海羅盤。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3]]
+            },
+            { id:"antlia", name:"唧筒座", nameEn:"Antlia",
+              stars:[
+                {name:"唧筒座 ε", ra:142.3113, dec:-35.9513, type:"star", mag:4.51, color:0xffd9ba, west:"唧筒座 ε", hip:46515, desc:"近南極星區，中國古代星官未涵蓋此星；為唧筒座連線圖形上的一顆星。"},
+                {name:"唧筒座 α", ra:156.7879, dec:-31.0678, type:"star", mag:4.28, color:0xffaa44, west:"唧筒座 α", hip:51172, desc:"代表科學抽氣唧筒。"},
+                {name:"唧筒座 ι", ra:164.1794, dec:-37.1378, type:"star", mag:4.6, color:0xffe7d3, west:"唧筒座 ι", hip:53502, desc:"近南極星區，中國古代星官未涵蓋此星；為唧筒座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2]]
+            },
+            { id:"sextans", name:"六分儀座", nameEn:"Sextans",
+              stars:[
+                {name:"六分儀座 α", ra:151.9845, dec:-0.3716, type:"star", mag:4.48, color:0xd4e2ff, west:"六分儀座 α", hip:49641, desc:"近南極星區，中國古代星官未涵蓋此星；為六分儀座連線圖形上的一顆星。"},
+                {name:"星宿增十二", ra:148.1268, dec:-8.105, type:"star", mag:5.07, color:0xd9e4ff, west:"六分儀座 γ", hip:48437, desc:"中國星官「星宿」的成員星，同時也是六分儀座連線圖形上的一顆星。"},
+                {name:"天相增六", ra:157.3696, dec:-2.7391, type:"star", mag:5.19, color:0xd3e1ff, west:"六分儀座 δ", hip:51362, desc:"中國星官「天相」的成員星，同時也是六分儀座連線圖形上的一顆星。"},
+                {name:"天相增十", ra:157.5728, dec:-0.637, type:"star", mag:5.08, color:0xcedeff, west:"六分儀座 β", hip:51437, desc:"中國星官「天相」的成員星，同時也是六分儀座連線圖形上的一顆星。"},
+                {name:"六分儀座α", ra:161.7, dec:-0.2, type:"star", mag:4.48, color:0xffffff, west:"六分儀座α", desc:"位於天球赤道上的暗淡科學儀器星座。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3]]
+            },
+            { id:"monoceros", name:"麒麟座", nameEn:"Monoceros",
+              stars:[
+                {name:"闕丘增七", ra:115.3118, dec:-9.5511, type:"star", mag:3.94, color:0xffe6d2, west:"麒麟座 α", hip:37447, desc:"中國星官「闕丘」的成員星，同時也是麒麟座連線圖形上的一顆星。"},
+                {name:"外廚增一", ra:122.1485, dec:-2.9838, type:"star", mag:4.36, color:0xffe8d5, west:"麒麟座 ζ", hip:39863, desc:"中國星官「外廚」的成員星，同時也是麒麟座連線圖形上的一顆星。"},
+                {name:"闕丘增三", ra:107.9661, dec:-0.4928, type:"star", mag:4.15, color:0xd6e3ff, west:"麒麟座 δ", hip:34769, desc:"中國星官「闕丘」的成員星，同時也是麒麟座連線圖形上的一顆星。"},
+                {name:"參宿增廿六", ra:97.2045, dec:-7.0331, type:"star", mag:3.76, color:0xd0dfff, west:"麒麟座 β", hip:30867, desc:"中國星官「參宿增廿」的成員星，同時也是麒麟座連線圖形上的一顆星。"},
+                {name:"參宿增廿八", ra:93.7139, dec:-6.2748, type:"star", mag:3.99, color:0xffdcbf, west:"麒麟座 γ", hip:29651, desc:"中國星官「參宿增廿」的成員星，同時也是麒麟座連線圖形上的一顆星。"},
+                {name:"闕丘一", ra:101.9652, dec:2.4122, type:"star", mag:4.48, color:0xffe3cd, west:"麒麟座 18", hip:32578, desc:"中國星官「闕丘」的成員星，同時也是麒麟座連線圖形上的一顆星。"},
+                {name:"四瀆四", ra:95.942, dec:4.5929, type:"star", mag:4.39, color:0xe5ecff, west:"麒麟座 ε", hip:30419, desc:"中國星官「四瀆」的成員星，同時也是麒麟座連線圖形上的一顆星。"},
+                {name:"四瀆三", ra:98.2259, dec:7.333, type:"star", mag:4.47, color:0xd8e4ff, west:"麒麟座 13", hip:31216, desc:"中國星官「四瀆」的成員星，同時也是麒麟座連線圖形上的一顆星。"},
+                {name:"四瀆增一", ra:100.2444, dec:9.8958, type:"star", mag:4.66, color:0xc9daff, west:"麒麟座 15", hip:31978, desc:"中國星官「四瀆」的成員星，同時也是麒麟座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [2, 5], [5, 6], [6, 7], [7, 8]]
+            },
+            { id:"lepus", name:"天兔座", nameEn:"Lepus",
+              stars:[
+                {name:"廁增五", ra:91.5388, dec:-14.9353, type:"star", mag:4.67, color:0xd9e5ff, west:"天兔座 θ", hip:28910, desc:"中國星官「廁」的成員星，同時也是天兔座連線圖形上的一顆星。"},
+                {name:"廁增六", ra:89.1012, dec:-14.1677, type:"star", mag:3.71, color:0xf1f2ff, west:"天兔座 η", hip:28103, desc:"中國星官「廁」的成員星，同時也是天兔座連線圖形上的一顆星。"},
+                {name:"廁增七", ra:86.7389, dec:-14.822, type:"star", mag:3.55, color:0xdde7ff, west:"天兔座 ζ", hip:27288, desc:"中國星官「廁」的成員星，同時也是天兔座連線圖形上的一顆星。"},
+                {name:"廁一", ra:83.1826, dec:-17.8223, type:"star", mag:2.58, color:0xe5ecff, west:"Arneb · 天兔座 α", hip:25985, desc:"中國星官「廁」的成員星，同時也是天兔座連線圖形上的一顆星。"},
+                {name:"屏一", ra:78.2329, dec:-16.2055, type:"star", mag:3.29, color:0xd0dfff, west:"天兔座 μ", hip:24305, desc:"中國星官「屏」的成員星，同時也是天兔座連線圖形上的一顆星。"},
+                {name:"屏二", ra:76.3653, dec:-22.371, type:"star", mag:3.19, color:0xffd7b7, west:"天兔座 ε", hip:23685, desc:"中國星官「屏」的成員星，同時也是天兔座連線圖形上的一顆星。"},
+                {name:"廁二", ra:82.0613, dec:-20.7594, type:"star", mag:2.81, color:0xffefe1, west:"Nihal · 天兔座 β", hip:25606, desc:"中國星官「廁」的成員星，同時也是天兔座連線圖形上的一顆星。"},
+                {name:"廁三", ra:86.1158, dec:-22.4484, type:"star", mag:3.59, color:0xfffefb, west:"Kursi al Jabbar · 天兔座 γ", hip:27072, desc:"中國星官「廁」的成員星，同時也是天兔座連線圖形上的一顆星。"},
+                {name:"廁四", ra:87.8304, dec:-20.8791, type:"star", mag:3.76, color:0xffe7d4, west:"Arsh al Jauzah · 天兔座 δ", hip:27654, desc:"中國星官「廁」的成員星，同時也是天兔座連線圖形上的一顆星。"},
+                {name:"軍井二", ra:78.3078, dec:-12.9413, type:"star", mag:4.36, color:0xd1dfff, west:"天兔座 κ", hip:24327, desc:"中國星官「軍井」的成員星，同時也是天兔座連線圖形上的一顆星。"},
+                {name:"軍井三", ra:79.8939, dec:-13.1768, type:"star", mag:4.29, color:0xc9daff, west:"天兔座 λ", hip:24845, desc:"中國星官「軍井」的成員星，同時也是天兔座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [9, 4], [4, 10]]
+            },
+            { id:"triangulum", name:"三角座", nameEn:"Triangulum",
+              stars:[
+                {name:"婁宿增六", ra:28.2704, dec:29.5788, type:"star", mag:3.42, color:0xfffefa, west:"Mothallah · 三角座 α", hip:8796, desc:"中國星官「婁宿」的成員星，同時也是三角座連線圖形上的一顆星。"},
+                {name:"天大將軍九", ra:32.3859, dec:34.9873, type:"star", mag:3, color:0xdfe8ff, west:"Mizan · 三角座 β", hip:10064, desc:"中國星官「天大將軍」的成員星，同時也是三角座連線圖形上的一顆星。"},
+                {name:"天大將軍十", ra:34.3286, dec:33.8472, type:"star", mag:4.03, color:0xd8e4ff, west:"三角座 γ", hip:10670, desc:"中國星官「天大將軍」的成員星，同時也是三角座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 0]]
+            },
+            { id:"triangulum_australe", name:"南三角座", nameEn:"Triangulum Australe",
+              stars:[
+                {name:"三角形三", ra:252.1662, dec:-69.0277, type:"star", mag:1.91, color:0xffd8b8, west:"Atria · 南三角座 α", hip:82273, desc:"中國星官「三角形」的成員星，同時也是南三角座連線圖形上的一顆星。"},
+                {name:"三角形二", ra:238.7857, dec:-63.4307, type:"star", mag:2.83, color:0xeef1ff, west:"南三角座 β", hip:77952, desc:"中國星官「三角形」的成員星，同時也是南三角座連線圖形上的一顆星。"},
+                {name:"三角形一", ra:229.7274, dec:-68.6795, type:"star", mag:2.87, color:0xd7e3ff, west:"南三角座 γ", hip:74946, desc:"中國星官「三角形」的成員星，同時也是南三角座連線圖形上的一顆星。"}
+              ],
+              lines:[[0, 1], [1, 2], [2, 0]]
+            }
+        ];
+
+        // --- 初始化場景 ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 2, 5);  // 從地球內部向外看
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.rotateSpeed = 0.5;
+        controls.minDistance = 0;   // 允許進入天球內側
+        controls.maxDistance = 500; // 也可以拉到天球外面，從外側俯瞰整個星空球
+
+        // --- 寫實貼圖生成 (Procedural) ---
+        function createStarTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            const grd = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+            grd.addColorStop(0, 'rgba(255,255,255,1)');
+            grd.addColorStop(0.1, 'rgba(255,255,255,0.8)');
+            grd.addColorStop(0.2, 'rgba(255,255,255,0.2)');
+            grd.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grd;
+            ctx.fillRect(0, 0, 128, 128);
+            // 十字光芒
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(64, 10); ctx.lineTo(64, 118); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(10, 64); ctx.lineTo(118, 64); ctx.stroke();
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createNebulaTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            for(let i=0; i<30; i++) {
+                const x = 128 + (Math.random()-0.5)*100;
+                const y = 128 + (Math.random()-0.5)*100;
+                const r = 20 + Math.random()*60;
+                const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+                g.addColorStop(0, 'rgba(255,255,255,0.05)');
+                g.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = g;
+                ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const starTex = createStarTexture();
+        const nebulaTex = createNebulaTexture();
+
+        // --- 座標轉換 ---
+        function calculatePosition(ra, dec, radius) {
+            const phi = (90 - dec) * (Math.PI / 180);
+            const theta = (ra + 180) * (Math.PI / 180);
+            return new THREE.Vector3(
+                radius * Math.sin(phi) * Math.cos(theta),
+                radius * Math.cos(phi),
+                radius * Math.sin(phi) * Math.sin(theta)
+            );
+        }
+
+        // --- 建立天球與經緯線 ---
+        const sphereRadius = 150;
+        
+        // 經緯線網格 (Grid)
+        const gridGroup = new THREE.Group();
+        // 緯線 (Declination)
+        for(let d = -80; d <= 80; d += 20) {
+            const radius = sphereRadius * Math.cos(d * Math.PI / 180);
+            const y = sphereRadius * Math.sin(d * Math.PI / 180);
+            const points = [];
+            for(let i=0; i<=64; i++) {
+                const ang = (i/64) * Math.PI * 2;
+                points.push(new THREE.Vector3(radius * Math.cos(ang), y, radius * Math.sin(ang)));
+            }
+            const geo = new THREE.BufferGeometry().setFromPoints(points);
+            const mat = new THREE.LineBasicMaterial({ color: 0x4488bb, transparent: true, opacity: 0.55 });
+            gridGroup.add(new THREE.Line(geo, mat));
+        }
+        // 經線 (Right Ascension)
+        for(let r = 0; r < 360; r += 30) {
+            const points = [];
+            for(let i=0; i<=64; i++) {
+                const ang = (i/64) * Math.PI * 2;
+                points.push(new THREE.Vector3(sphereRadius * Math.cos(r*Math.PI/180) * Math.cos(ang), sphereRadius * Math.sin(ang), sphereRadius * Math.sin(r*Math.PI/180) * Math.cos(ang)));
+            }
+            const geo = new THREE.BufferGeometry().setFromPoints(points);
+            const mat = new THREE.LineBasicMaterial({ color: 0x4488bb, transparent: true, opacity: 0.55 });
+            gridGroup.add(new THREE.Line(geo, mat));
+        }
+        scene.add(gridGroup);
+
+        // --- 天球中心（觀測者位置）：不再繪製地球，中心保持淨空 ---
+        
+        const light = new THREE.PointLight(0xffffff, 2000, 500);
+        light.position.set(20, 20, 20);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x222233, 0.5));
+
+        // --- 放置星體 ---
+        const starEntries = []; // {mesh, data, ci, si}
+        const constGroups = []; // Lines for each constellation
+        const lineMaterials = []; // 所有 Line2 材質，用於 resize 時更新 resolution
+
+        CONSTELLATIONS.forEach((con, ci) => {
+            const group = new THREE.Group();
+            const starMeshes = [];
+            
+            con.stars.forEach((s, si) => {
+                const pos = calculatePosition(s.ra, s.dec, sphereRadius);
+                let obj;
+                
+                if(s.type === 'star') {
+                    const size = Math.max(1.4, (5 - s.mag) * 1.1);  // 略放大
+                    const mat = new THREE.SpriteMaterial({ map: starTex, color: s.color, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending, depthWrite: false });
+                    obj = new THREE.Sprite(mat);
+                    obj.scale.set(size, size, 1);
+                } else if(s.type === 'nebula' || s.type === 'cluster') {
+                    const mat = new THREE.SpriteMaterial({ map: nebulaTex, color: s.color, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false });
+                    obj = new THREE.Sprite(mat);
+                    obj.scale.set(11, 11, 1);
+                }
+                
+                obj.position.copy(pos);
+                scene.add(obj);
+                
+                const entry = { mesh: obj, data: s, ci, si };
+                starEntries.push(entry);
+                starMeshes.push(entry);
+            });
+
+            // 連線（使用 Line2 粗線，讓星座連線更清楚）
+            // 若原始資料沒有提供連線（只給了代表星），但星數 >= 2，
+            // 則自動依序將星體串接起來，避免完全沒有連線可看
+            const lineIndexPairs = con.lines && con.lines.length
+                ? con.lines
+                : (con.stars.length >= 2
+                    ? con.stars.slice(1).map((_, i) => [i, i + 1])
+                    : []);
+
+            const linePositions = [];
+            lineIndexPairs.forEach(([a, b]) => {
+                const pa = starMeshes[a].mesh.position;
+                const pb = starMeshes[b].mesh.position;
+                linePositions.push(pa.x, pa.y, pa.z, pb.x, pb.y, pb.z);
+            });
+            const lineGeo = new LineSegmentsGeometry();
+            lineGeo.setPositions(linePositions.length ? linePositions : [0,0,0, 0,0,0]);
+            const lineMat = new LineMaterial({
+                color: 0x9ecbff,
+                linewidth: 2, // 螢幕像素寬度（原本 3 偏粗，調細一點）
+                transparent: true,
+                opacity: 0,
+                resolution: new THREE.Vector2(window.innerWidth, window.innerHeight)
+            });
+            const lineObj = new LineSegments2(lineGeo, lineMat);
+            lineObj.computeLineDistances();
+            scene.add(lineObj);
+            constGroups.push(lineObj);
+            lineMaterials.push(lineMat);
+        });
+
+        // --- 夏季大三角（預設隱藏，點按鈕才顯示）---
+        const stPositions = SUMMER_TRIANGLE.map(name => {
+            const e = starEntries.find(e => e.data.name === name);
+            return e ? e.mesh.position.clone() : new THREE.Vector3();
+        });
+        const stLinePositions = [
+            stPositions[0].x, stPositions[0].y, stPositions[0].z, stPositions[1].x, stPositions[1].y, stPositions[1].z,
+            stPositions[1].x, stPositions[1].y, stPositions[1].z, stPositions[2].x, stPositions[2].y, stPositions[2].z,
+            stPositions[2].x, stPositions[2].y, stPositions[2].z, stPositions[0].x, stPositions[0].y, stPositions[0].z
+        ];
+        const stLineGeo = new LineSegmentsGeometry();
+        stLineGeo.setPositions(stLinePositions);
+        const stLineMat = new LineMaterial({
+            color: 0xffd35c,
+            linewidth: 2.5,
+            transparent: true,
+            opacity: 0,
+            resolution: new THREE.Vector2(window.innerWidth, window.innerHeight)
+        });
+        const summerTriangleLine = new LineSegments2(stLineGeo, stLineMat);
+        summerTriangleLine.computeLineDistances();
+        scene.add(summerTriangleLine);
+        lineMaterials.push(stLineMat);
+        let summerTriangleActive = false;
+
+        // --- 選取光圈 ---
+        const ringGeo = new THREE.RingGeometry(3, 3.2, 32);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0 });
+        const selectionRing = new THREE.Mesh(ringGeo, ringMat);
+        scene.add(selectionRing);
+
+        // --- UI 互動 ---
+        const label       = document.getElementById('star-label');
+        const lName       = document.getElementById('l-name');
+        const lCoords     = document.getElementById('l-coords');
+        const constMenu   = document.getElementById('const-menu');
+        const subMenu     = document.getElementById('sub-menu');
+        const starBtns    = document.getElementById('star-btns');
+        const constSubMenu= document.getElementById('const-submenu');
+        const constBtns   = document.getElementById('const-btns');
+        const detailPanel = document.getElementById('detail-panel');
+        document.getElementById('dp-close').onclick = () => detailPanel.classList.remove('visible');
+        
+        // Touch to close bottom sheet (simple swipe down logic)
+        let touchStartY = 0;
+        detailPanel.addEventListener('touchstart', e => touchStartY = e.touches[0].clientY, {passive: true});
+        detailPanel.addEventListener('touchend', e => {
+            if(e.changedTouches[0].clientY - touchStartY > 50) detailPanel.classList.remove('visible');
+        });
+
+        const TYPE_LABEL = { star:'⭐ 恆星', nebula:'🌌 星雲', cluster:'✨ 星團' };
+        const TYPE_COLOR = { star:'#7aa2f7', nebula:'#bb9af7', cluster:'#e0af68' };
+
+        let activeCi = -1;
+        let activeCategory = null;
+        let selectedEntry = null;
+
+        // --- 星座分類（大標題）：依黃道 / 拱極 / 季節（赤經）/ 南天 自動歸類 ---
+        const ZODIAC_IDS = ['aries','taurus','gemini','cancer','leo','virgo','libra','scorpius','sagittarius','capricornus','aquarius','pisces'];
+        const CATEGORY_ORDER = ['黃道十二宮','拱極星座','春季星空','夏季星空','秋季星空','冬季星空','南天星座','極南星座'];
+
+        // 季節歸屬採人工校訂表（依北半球晚上 9 點前後該星座上中天的月份），
+        // 不再用赤經平均值自動判斷 —— 平均值會在赤經 0h 附近繞回，
+        // 例如仙女座橫跨 354°~30°，平均後會被誤判成冬季。
+        const CONST_CATEGORY = {
+            ursa_minor:            "拱極星座",
+            ursa_major:            "拱極星座",
+            cassiopeia:            "拱極星座",
+            cepheus:               "拱極星座",
+            andromeda:             "秋季星空",
+            perseus:               "秋季星空",
+            auriga:                "冬季星空",
+            bootes:                "春季星空",
+            lyra:                  "夏季星空",
+            cygnus:                "夏季星空",
+            aquila:                "夏季星空",
+            hercules:              "夏季星空",
+            ophiuchus:             "夏季星空",
+            serpens:               "夏季星空",
+            pegasus:               "秋季星空",
+            draco:                 "拱極星座",
+            canes_venatici:        "春季星空",
+            coma_berenices:        "春季星空",
+            corona_borealis:       "夏季星空",
+            leo_minor:             "春季星空",
+            lynx:                  "冬季星空",
+            camelopardalis:        "拱極星座",
+            canis_minor:           "冬季星空",
+            lacerta:               "秋季星空",
+            delphinus:             "夏季星空",
+            equuleus:              "秋季星空",
+            sagitta:               "夏季星空",
+            vulpecula:             "夏季星空",
+            orion:                 "冬季星空",
+            canis_major:           "冬季星空",
+            carina:                "南天星座",
+            centaurus:             "南天星座",
+            crux:                  "南天星座",
+            eridanus:              "冬季星空",
+            columba:               "冬季星空",
+            piscis_austrinus:      "秋季星空",
+            pavo:                  "南天星座",
+            grus:                  "南天星座",
+            puppis:                "冬季星空",
+            vela:                  "南天星座",
+            fornax:                "冬季星空",
+            cetus:                 "秋季星空",
+            phoenix:               "南天星座",
+            hydra:                 "春季星空",
+            crater:                "春季星空",
+            corvus:                "春季星空",
+            lupus:                 "南天星座",
+            corona_australis:      "夏季星空",
+            ara:                   "南天星座",
+            scutum:                "夏季星空",
+            octans:                "極南星座",
+            hydrus:                "極南星座",
+            dorado:                "南天星座",
+            volans:                "極南星座",
+            chamaeleon:            "極南星座",
+            musca:                 "極南星座",
+            apus:                  "極南星座",
+            norma:                 "南天星座",
+            circinus:              "南天星座",
+            telescopium:           "南天星座",
+            microscopium:          "秋季星空",
+            caelum:                "冬季星空",
+            horologium:            "南天星座",
+            pictor:                "南天星座",
+            reticulum:             "南天星座",
+            indus:                 "南天星座",
+            tucana:                "南天星座",
+            mensa:                 "極南星座",
+            sculptor:              "秋季星空",
+            pyxis:                 "春季星空",
+            antlia:                "春季星空",
+            sextans:               "春季星空",
+            monoceros:             "冬季星空",
+            lepus:                 "冬季星空",
+            triangulum:            "秋季星空",
+            triangulum_australe:   "南天星座"
+        };
+
+        function categorize(con) {
+            if(ZODIAC_IDS.includes(con.id)) return '黃道十二宮';
+            return CONST_CATEGORY[con.id] || '秋季星空';
+        }
+
+        const CATEGORIES = {};
+        CATEGORY_ORDER.forEach(c => CATEGORIES[c] = []);
+        CONSTELLATIONS.forEach((con, ci) => {
+            const cat = categorize(con);
+            if(!CATEGORIES[cat]) CATEGORIES[cat] = [];
+            CATEGORIES[cat].push(ci);
+        });
+        // 反查表：星座索引 ci -> 所屬分類名稱
+        const CI_TO_CATEGORY = {};
+        Object.entries(CATEGORIES).forEach(([cat, list]) => list.forEach(ci => CI_TO_CATEGORY[ci] = cat));
+
+        // --- 鏡頭自動轉向：沿球面大圓弧平滑飛向指定方向 ---
+        // 改用「方向向量球面插值 (slerp)」而非直線移動相機位置：
+        // 直線移動時，若起點與終點方向接近相反，中途會經過球心附近，
+        // 導致 lookAt() 瞬間方向計算失真，感覺像是「轉到後面去了」。
+        // 球面插值全程與地球中心保持等距，沿最短弧線平滑轉動，不會有這個問題。
+        let flyAnimId = null;
+        function slerpVectors(v0, v1, t) {
+            const dot = THREE.MathUtils.clamp(v0.dot(v1), -1, 1);
+            const omega = Math.acos(dot);
+            if (omega < 1e-4) return v0.clone(); // 方向幾乎相同，不需轉動
+            const sinOmega = Math.sin(omega);
+            if (sinOmega < 1e-4) {
+                // 接近正相反方向（180°），退回線性插值作為安全備案
+                return v0.clone().lerp(v1, t).normalize();
+            }
+            const s0 = Math.sin((1 - t) * omega) / sinOmega;
+            const s1 = Math.sin(t * omega) / sinOmega;
+            return v0.clone().multiplyScalar(s0).add(v1.clone().multiplyScalar(s1));
+        }
+        function flyToDirection(dir, targetDist) {
+            if(flyAnimId) cancelAnimationFrame(flyAnimId);
+            const curDist = Math.max(camera.position.length(), 5);
+            // targetDist 有給的話代表「至少要飛到這麼近」（不會比現在更遠），沒給就保持目前縮放距離
+            const dist = targetDist !== undefined ? Math.min(curDist, targetDist) : curDist;
+            const startDir = camera.position.clone().normalize();
+            const endDir = dir.clone().normalize().multiplyScalar(-1); // 鏡頭停在目標方向的正對面，朝向目標看
+            const startTime = performance.now();
+            const duration = 700;
+            controls.enabled = false;
+            function step(now) {
+                const t = Math.min((now - startTime) / duration, 1);
+                const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
+                const curDir = slerpVectors(startDir, endDir, ease);
+                const curFrameDist = curDist + (dist - curDist) * ease; // 距離也一起平滑過渡
+                camera.position.copy(curDir.multiplyScalar(curFrameDist));
+                camera.lookAt(0, 0, 0);
+                if(t < 1) {
+                    flyAnimId = requestAnimationFrame(step);
+                } else {
+                    controls.enabled = true;
+                    flyAnimId = null;
+                }
+            }
+            flyAnimId = requestAnimationFrame(step);
+        }
+        function flyToConstellation(ci) {
+            const entries = starEntries.filter(e => e.ci === ci);
+            if(!entries.length) return;
+            const avg = new THREE.Vector3();
+            entries.forEach(e => avg.add(e.mesh.position));
+            avg.divideScalar(entries.length);
+            flyToDirection(avg);
+        }
+
+        function selectStar(entry) {
+            selectedEntry = entry;
+            const s = entry.data;
+
+            // 選取光圈
+            selectionRing.position.copy(entry.mesh.position);
+            selectionRing.lookAt(0,0,0);
+            ringMat.opacity = 0.8;
+
+            // 懸浮小標籤 (手機版隱藏或移至不擋手處)
+            label.style.display = 'none'; // 手機版直接用 Bottom Sheet 就好
+            lName.textContent   = s.name;
+            lCoords.textContent = `RA: ${s.ra}° | Dec: ${s.dec}°`;
+            label.style.display = 'block';
+
+            // 右側詳細面板
+            document.getElementById('dp-type').textContent = TYPE_LABEL[s.type] || s.type;
+            document.getElementById('dp-type').style.color = TYPE_COLOR[s.type] || '#c0caf5';
+            document.getElementById('dp-name').textContent = s.name;
+
+            // 夏季大三角 badge
+            const badge = document.getElementById('dp-badge');
+            badge.innerHTML = SUMMER_TRIANGLE.includes(s.name)
+                ? '<span class="summer-triangle-badge">△ 夏季大三角</span>' : '';
+
+            const westRow = document.getElementById('dp-west-row');
+            if(s.west) {
+                westRow.style.display = 'flex';
+                document.getElementById('dp-west').textContent = s.west;
+            } else { westRow.style.display = 'none'; }
+
+            const hipRow = document.getElementById('dp-hip-row');
+            if(s.hip) {
+                hipRow.style.display = 'flex';
+                document.getElementById('dp-hip').textContent = 'HIP ' + s.hip;
+            } else { hipRow.style.display = 'none'; }
+
+            document.getElementById('dp-ra').textContent   = s.ra + '°';
+            document.getElementById('dp-dec').textContent  = s.dec + '°';
+
+            const magRow  = document.getElementById('dp-mag-row');
+            const distRow = document.getElementById('dp-dist-row');
+            if(s.mag !== undefined) {
+                magRow.style.display = 'flex';
+                document.getElementById('dp-mag').textContent = s.mag;
+            } else { magRow.style.display = 'none'; }
+
+            if(s.dist) {
+                distRow.style.display = 'flex';
+                document.getElementById('dp-dist').textContent = s.dist;
+            } else { distRow.style.display = 'none'; }
+
+            document.getElementById('dp-desc').textContent = s.desc || '';
+            detailPanel.classList.add('visible');
+
+            // 旋轉中心永遠保持地球中心
+            controls.target.set(0, 0, 0);
+
+            // 鏡頭飛近並置中這顆星（比星座整體視角再拉近一點，但不會比目前更遠）
+            flyToDirection(entry.mesh.position, 25);
+
+            // Highlight sub-btn
+            document.querySelectorAll('.star-item').forEach(b => b.classList.toggle('active', b.dataset.si == entry.si));
+        }
+
+        function toggleSummerTriangle() {
+            summerTriangleActive = !summerTriangleActive;
+            stLineMat.opacity = summerTriangleActive ? 0.8 : 0;
+            document.getElementById('st-btn').classList.toggle('active', summerTriangleActive);
+
+            if(summerTriangleActive) {
+                // 展開子選單：三顆頂點星
+                starBtns.innerHTML = '';
+                SUMMER_TRIANGLE.forEach(name => {
+                    const entry = starEntries.find(e => e.data.name === name);
+                    if(!entry) return;
+                    const div = document.createElement('div');
+                    div.className = 'star-item';
+                    div.textContent = name;
+                    div.onclick = () => selectStar(entry);
+                    starBtns.appendChild(div);
+                });
+                subMenu.style.display = 'block';
+                // 取消其他星座的 active
+                activeCi = -1;
+                constGroups.forEach(g => g.material.opacity = 0);
+                document.querySelectorAll('.const-item').forEach(b => b.classList.remove('active'));
+
+                // 自動轉向夏季大三角中心
+                const avg = new THREE.Vector3();
+                stPositions.forEach(p => avg.add(p));
+                avg.divideScalar(stPositions.length);
+                flyToDirection(avg);
+            } else {
+                subMenu.style.display = 'none';
+            }
+        }
+
+        function toggleConst(ci) {
+            // 關閉夏季大三角
+            summerTriangleActive = false;
+            stLineMat.opacity = 0;
+            document.getElementById('st-btn').classList.remove('active');
+
+            if(activeCi === ci) {
+                activeCi = -1;
+                subMenu.style.display = 'none';
+                label.style.display = 'none';
+                ringMat.opacity = 0;
+                detailPanel.classList.remove('visible');
+                constGroups.forEach(g => g.material.opacity = 0);
+                document.querySelectorAll('.const-item').forEach(b => b.classList.remove('active'));
+                return;
+            }
+            activeCi = ci;
+            constGroups.forEach((g, i) => g.material.opacity = (i === ci ? 0.75 : 0));
+
+            // 確保該星座所屬的分類子選單已展開，並同步高亮
+            const cat = CI_TO_CATEGORY[ci];
+            if(cat && activeCategory !== cat) showCategory(cat);
+            document.querySelectorAll('.const-item').forEach(b => b.classList.toggle('active', Number(b.dataset.ci) === ci));
+
+            // Sub menu（星體清單）
+            starBtns.innerHTML = '';
+            CONSTELLATIONS[ci].stars.forEach((s, si) => {
+                const div = document.createElement('div');
+                div.className = 'star-item';
+                div.dataset.si = si;
+                div.textContent = s.name;
+                div.onclick = () => selectStar(starEntries.find(e => e.ci === ci && e.si === si));
+                starBtns.appendChild(div);
+            });
+            subMenu.style.display = 'block';
+
+            // 自動將鏡頭轉向該星座
+            flyToConstellation(ci);
+        }
+
+        // --- 分類子選單（小標題：該分類底下的星座列表）---
+        function showCategory(catName) {
+            activeCategory = catName;
+            constBtns.innerHTML = '';
+            (CATEGORIES[catName] || []).forEach(ci => {
+                const div = document.createElement('div');
+                div.className = 'const-item';
+                div.dataset.ci = ci;
+                div.textContent = CONSTELLATIONS[ci].name;
+                div.classList.toggle('active', ci === activeCi);
+                div.onclick = () => toggleConst(ci);
+                constBtns.appendChild(div);
+            });
+            constSubMenu.style.display = 'block';
+            document.querySelectorAll('.category-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === catName));
+        }
+
+        function toggleCategory(catName) {
+            if(activeCategory === catName) {
+                activeCategory = null;
+                constSubMenu.style.display = 'none';
+                document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+                return;
+            }
+            showCategory(catName);
+        }
+
+        // 建立底部按鈕：分類大標題（點擊後展開該分類的星座小標題）+ 夏季大三角（特別標記）
+        CATEGORY_ORDER.filter(cat => CATEGORIES[cat] && CATEGORIES[cat].length).forEach(catName => {
+            const btn = document.createElement('button');
+            btn.className = 'const-btn category-btn';
+            btn.dataset.cat = catName;
+            btn.textContent = `${catName} (${CATEGORIES[catName].length})`;
+            btn.onclick = () => toggleCategory(catName);
+            constMenu.appendChild(btn);
+        });
+        // 夏季大三角按鈕
+        const stBtn = document.createElement('button');
+        stBtn.className = 'const-btn';
+        stBtn.id = 'st-btn';
+        stBtn.textContent = '△ 夏季大三角';
+        stBtn.style.borderLeft = '1px solid rgba(255,200,60,0.3)';
+        stBtn.style.marginLeft = '4px';
+        stBtn.onclick = toggleSummerTriangle;
+        constMenu.appendChild(stBtn);
+
+        // --- 拖曳時關閉慣性，放手後恢復 ---
+        renderer.domElement.addEventListener('pointerdown', () => {
+            controls.enableDamping = false;
+        });
+        renderer.domElement.addEventListener('pointerup', () => {
+            controls.enableDamping = true;
+        });
+
+        // --- Raycasting (click) ---
+        // 使用螢幕投影距離來判斷點擊，Sprite 物件的 intersect 不穩定
+        let pointerMoved = false;
+        renderer.domElement.addEventListener('pointermove', () => { pointerMoved = true; });
+        renderer.domElement.addEventListener('pointerdown', () => { pointerMoved = false; });
+
+        window.addEventListener('click', (e) => {
+            if(pointerMoved) return;
+            // 螢幕像素座標 → NDC 標準設備座標 (-1 ~ 1)
+            const ndcX = (e.clientX / window.innerWidth) * 2 - 1;
+            const ndcY = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            // 找最近的星體（螢幕空間距離）
+            let bestEntry = null;
+            let bestDist = Infinity;
+            const clickPos = new THREE.Vector2(ndcX, ndcY);
+
+            starEntries.forEach(entry => {
+                const v = entry.mesh.position.clone().project(camera);
+                if(v.z > 1) return; // 在攝影機背面
+                const screenDist = clickPos.distanceTo(new THREE.Vector2(v.x, v.y));
+                if(screenDist < bestDist) {
+                    bestDist = screenDist;
+                    bestEntry = entry;
+                }
+            });
+
+            // 閾值：NDC 空間中 0.06 約等於螢幕上 ~40px
+            if(bestEntry && bestDist < 0.06) {
+                if(bestEntry.ci !== activeCi) toggleConst(bestEntry.ci);
+                selectStar(bestEntry);
+            }
+        });
+
+        // --- 渲染迴圈 ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            
+            // Label mapping
+            if(selectedEntry) {
+                const v = selectedEntry.mesh.position.clone().project(camera);
+                const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+                label.style.left = `${x}px`;
+                label.style.top = `${y}px`;
+                label.style.opacity = v.z > 1 ? 0 : 1;
+
+                selectionRing.scale.setScalar(1 + Math.sin(Date.now()*0.005)*0.1);
+            }
+            
+            
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            // Line2 粗線材質需要同步視窗解析度才能維持正確的像素寬度
+            lineMaterials.forEach(m => m.resolution.set(window.innerWidth, window.innerHeight));
+        });
+    </script>
+</body>
+</html>
